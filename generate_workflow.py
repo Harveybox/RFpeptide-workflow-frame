@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 from pathlib import Path
 from string import Template
 
@@ -36,6 +37,20 @@ def write_file(path: Path, content: str, force: bool) -> None:
             pass
 
 
+def copy_file(source: Path, destination: Path, force: bool) -> None:
+    if destination.exists() and not force:
+        raise FileExistsError(f"{destination} already exists; pass --force to overwrite")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+
+def resolve_local_path(path: str) -> Path:
+    candidate = Path(path).expanduser()
+    if not candidate.is_absolute():
+        candidate = SCRIPT_DIR / candidate
+    return candidate.resolve()
+
+
 def common_values(config: dict) -> dict:
     target = config["target"]
     pilot = config.get("pilot", "pilot0")
@@ -48,6 +63,7 @@ def common_values(config: dict) -> dict:
         "scratch_root": scratch_root,
         "home_project_dir": home_project_dir,
         "input_pdb": config["input_pdb"],
+        "input_pdb_bundle_name": Path(config.get("local_input_pdb", config["input_pdb"])).name,
         "target_chain": config.get("target_chain", "A"),
         "binder_chain": config.get("binder_chain", "B"),
         "contigs": config["contigs"],
@@ -58,13 +74,17 @@ def common_values(config: dict) -> dict:
 RFDIFFUSION_TEMPLATE = r"""#!/bin/bash
 set -euo pipefail
 
+WORKFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 QUEUE=${rf_queue}
+GPU_NCPU=${rf_gpu_ncpu}
+GPU_REQ=${rf_gpu_req}
+GPU_SPAN=${rf_gpu_span}
 MICROMAMBA="$HOME/bin/micromamba"
 ENV_NAME=${rf_env}
 RFDIFFUSION_DIR=${rf_dir}
 
 WORKDIR=${scratch_root}
-INPUT_PDB=${input_pdb}
+INPUT_PDB="$WORKFLOW_DIR/inputs/${input_pdb_bundle_name}"
 OUTPUT_PREFIX="$WORKDIR/example_outputs/${pilot}/diffused_binder_cyclic_${target}_${pilot}"
 
 N_SHARDS=${rf_n_shards}
@@ -74,6 +94,8 @@ mkdir -p "$WORKDIR"
 mkdir -p "$(dirname "$OUTPUT_PREFIX")"
 cd "$WORKDIR"
 
+echo "RFDiffusion GPU resource request: queue=${QUEUE}, ncpu=${GPU_NCPU}, span=${GPU_SPAN}, gpu=${GPU_REQ}"
+
 for i in $(seq 0 $((N_SHARDS-1))); do
     shard=$(printf "%02d" "$i")
     shard_prefix="${OUTPUT_PREFIX}_shard${shard}"
@@ -82,9 +104,9 @@ for i in $(seq 0 $((N_SHARDS-1))); do
 #!/bin/bash
 #BSUB -J ${target_lower}_${pilot}_rfd_${shard}
 #BSUB -q ${QUEUE}
-#BSUB -n 8
-#BSUB -R "span[ptile=8]"
-#BSUB -gpu "num=1/host"
+#BSUB -n ${rf_gpu_ncpu}
+#BSUB -R ${rf_gpu_span}
+#BSUB -gpu ${rf_gpu_req}
 #BSUB -o ${WORKDIR}/${target_lower}_${pilot}_rfd_${shard}.%J.out
 #BSUB -e ${WORKDIR}/${target_lower}_${pilot}_rfd_${shard}.%J.err
 
@@ -222,21 +244,22 @@ echo "Submitted ${N_SHARDS} ${target} ProteinMPNN shards to ${QUEUE}."
 AFCYC_TEMPLATE = r"""#!/bin/bash
 set -euo pipefail
 
-GPU_QUEUE="${GPU_QUEUE:-${afcyc_gpu_queue}}"
-GPU_NCPU="${GPU_NCPU:-1}"
-GPU_PTILE="${GPU_PTILE:-1}"
-GPU_REQ='num=1/host'
+WORKFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GPU_QUEUE=${afcyc_gpu_queue}
+GPU_NCPU=${afcyc_gpu_ncpu}
+GPU_REQ=${afcyc_gpu_req}
+GPU_SPAN=${afcyc_gpu_span}
 
-CPU_QUEUE="${CPU_QUEUE:-${afcyc_cpu_queue}}"
-CPU_NCPU="${CPU_NCPU:-1}"
-CPU_PTILE="${CPU_PTILE:-1}"
+CPU_QUEUE=${afcyc_cpu_queue}
+CPU_NCPU=${afcyc_cpu_ncpu}
+CPU_SPAN=${afcyc_cpu_span}
 
-N_SHARDS="${N_SHARDS:-${afcyc_n_shards}}"
+N_SHARDS=${afcyc_n_shards}
 MICROMAMBA="$HOME/bin/micromamba"
 ENV_NAME=${afcyc_env}
-AFCYC_SCRIPT=${afcyc_script}
-RMSD_SCRIPT=${afcyc_rmsd_script}
-MERGE_SCRIPT=${afcyc_merge_script}
+AFCYC_SCRIPT="$WORKFLOW_DIR/scripts/${afcyc_script_bundle_name}"
+RMSD_SCRIPT="$WORKFLOW_DIR/scripts/${afcyc_rmsd_script_bundle_name}"
+MERGE_SCRIPT="$WORKFLOW_DIR/scripts/${afcyc_merge_script_bundle_name}"
 
 INPUT_DIR=${scratch_root}/mpnn_relax${mpnn_relax_cycles}_out/${pilot}
 OUT_BASE=${scratch_root}/afcyc_out/${pilot}
@@ -253,6 +276,9 @@ MERGED_DIR="$OUT_BASE/merged"
 
 mkdir -p "$RUNLIST_DIR" "$SHARD_INPUT_ROOT" "$SHARD_RESULT_ROOT" "$LOG_DIR" "$MERGED_DIR"
 ALL_TAGS="$RUNLIST_DIR/all_tags.txt"
+
+echo "AfCyc GPU resource request: queue=${GPU_QUEUE}, ncpu=${GPU_NCPU}, span=${GPU_SPAN}, gpu=${GPU_REQ}"
+echo "AfCyc CPU resource request: queue=${CPU_QUEUE}, ncpu=${CPU_NCPU}, span=${CPU_SPAN}"
 
 python3 - <<'PY' "$INPUT_DIR" "$ALL_TAGS"
 import sys, os, glob
@@ -309,9 +335,9 @@ for RUNLIST in "$RUNLIST_DIR"/runlist_*.txt; do
 #!/bin/bash
 #BSUB -J ${target_lower}_afcyc_${shard}
 #BSUB -q ${GPU_QUEUE}
-#BSUB -n ${GPU_NCPU}
-#BSUB -R "span[ptile=${GPU_PTILE}]"
-#BSUB -gpu "${GPU_REQ}"
+#BSUB -n ${afcyc_gpu_ncpu}
+#BSUB -R ${afcyc_gpu_span}
+#BSUB -gpu ${afcyc_gpu_req}
 #BSUB -o ${LOG_DIR}/${shard}.afcyc.%J.out
 #BSUB -e ${LOG_DIR}/${shard}.afcyc.%J.err
 set -euo pipefail
@@ -336,8 +362,8 @@ EOF
 #!/bin/bash
 #BSUB -J ${target_lower}_rmsd_${shard}
 #BSUB -q ${CPU_QUEUE}
-#BSUB -n ${CPU_NCPU}
-#BSUB -R "span[ptile=${CPU_PTILE}]"
+#BSUB -n ${afcyc_cpu_ncpu}
+#BSUB -R ${afcyc_cpu_span}
 #BSUB -o ${LOG_DIR}/${shard}.rmsd.%J.out
 #BSUB -e ${LOG_DIR}/${shard}.rmsd.%J.err
 set -euo pipefail
@@ -387,14 +413,17 @@ echo "Merged csv: $MERGED_DIR/results_merged.csv"
 PYROSETTA_TEMPLATE = r"""#!/bin/bash
 set -euo pipefail
 
+WORKFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 QUEUE="${QUEUE:-${pyro_queue}}"
 N_SHARDS="${N_SHARDS:-${pyro_n_shards}}"
+WAIT_FOR_STABLE_INPUT="${WAIT_FOR_STABLE_INPUT:-1}"
+INPUT_STABILITY_SECONDS="${INPUT_STABILITY_SECONDS:-30}"
 
 MICROMAMBA="$HOME/bin/micromamba"
 ENV_NAME=${pyro_env}
 PYTHON_BIN="$($MICROMAMBA run -n "$ENV_NAME" which python)"
-SCRIPT=${pyro_script}
-MERGE_SCRIPT=${pyro_merge_script}
+SCRIPT="$WORKFLOW_DIR/scripts/${pyro_script_bundle_name}"
+MERGE_SCRIPT="$WORKFLOW_DIR/scripts/${pyro_merge_script_bundle_name}"
 
 INPUT_DIR=${scratch_root}/mpnn_relax${mpnn_relax_cycles}_out/${pilot}
 OUT_BASE=${scratch_root}/pyrosetta_scores/${pilot}
@@ -413,6 +442,31 @@ MERGED_DIR="$OUT_BASE/merged"
 
 mkdir -p "$RUNLIST_DIR" "$SHARD_INPUT_ROOT" "$SHARD_RESULT_ROOT" "$LOG_DIR" "$MERGED_DIR"
 ALL_TAGS="$RUNLIST_DIR/all_pdbs.txt"
+
+count_input_pdbs() {
+    find "$INPUT_DIR" -maxdepth 1 -type f -name "*.pdb" | wc -l
+}
+
+INPUT_COUNT_1=$(count_input_pdbs)
+echo "PyRosetta input pdb count before stability check: ${INPUT_COUNT_1}"
+if [[ "$INPUT_COUNT_1" -eq 0 ]]; then
+    echo "ERROR: no input pdb files found in $INPUT_DIR" >&2
+    exit 2
+fi
+
+if [[ "$WAIT_FOR_STABLE_INPUT" == "1" ]]; then
+    sleep "$INPUT_STABILITY_SECONDS"
+    INPUT_COUNT_2=$(count_input_pdbs)
+    echo "PyRosetta input pdb count after ${INPUT_STABILITY_SECONDS}s: ${INPUT_COUNT_2}"
+    if [[ "$INPUT_COUNT_1" -ne "$INPUT_COUNT_2" ]]; then
+        echo "ERROR: input pdb count changed from ${INPUT_COUNT_1} to ${INPUT_COUNT_2}; upstream output is still changing. Wait for upstream jobs to finish, then resubmit PyRosetta." >&2
+        exit 3
+    fi
+fi
+
+if [[ "$INPUT_COUNT_1" -lt "$N_SHARDS" ]]; then
+    echo "WARNING: input pdb count (${INPUT_COUNT_1}) is lower than requested shards (${N_SHARDS}); only ${INPUT_COUNT_1} non-empty shard jobs can be submitted." >&2
+fi
 
 python3 - <<'PY' "$INPUT_DIR" "$ALL_TAGS"
 import sys, os, glob
@@ -444,6 +498,7 @@ for i in range(n_shards):
         for name in subset:
             handle.write(name + "\n")
     print(f"{path}: {len(subset)} files")
+print(f"Created {len([name for name in os.listdir(runlist_dir) if name.startswith('runlist_') and name.endswith('.txt')])} non-empty runlists from {len(names)} pdbs; requested {n_shards} shards")
 PY
 
 for RUNLIST in "$RUNLIST_DIR"/runlist_*.txt; do
@@ -523,6 +578,9 @@ date
 EOF
 fi
 
+if [[ ${#JOB_IDS[@]} -ne "$N_SHARDS" ]]; then
+    echo "WARNING: submitted ${#JOB_IDS[@]} PyRosetta shard jobs, requested ${N_SHARDS}. Check input pdb count and runlists under $RUNLIST_DIR." >&2
+fi
 echo "Submitted ${#JOB_IDS[@]} ${target} PyRosetta shard jobs."
 echo "Merged csv: $MERGED_DIR/pyrosetta_scores_merged.csv"
 """
@@ -549,8 +607,17 @@ def build_values(config: dict) -> dict:
     mpnn = config["proteinmpnn"]
     afcyc = config["afcyc"]
     pyro = config["pyrosetta"]
+    afcyc_gpu_ncpu = afcyc.get("gpu_ncpu", 32)
+    afcyc_cpu_ncpu = afcyc.get("cpu_ncpu", 1)
+    afcyc_gpu_span = afcyc.get("gpu_span") or f"span[ptile={afcyc_gpu_ncpu}]"
+    afcyc_cpu_span = afcyc.get("cpu_span") or f"span[ptile={afcyc_cpu_ncpu}]"
+    rf_gpu_ncpu = rf.get("gpu_ncpu", afcyc_gpu_ncpu)
+    rf_gpu_span = rf.get("gpu_span") or f"span[ptile={rf_gpu_ncpu}]"
     values.update({
-        "rf_queue": sh_quote(rf.get("queue", "8v100-32-sc")),
+        "rf_queue": sh_quote(rf.get("queue", afcyc.get("gpu_queue", "hgx-aais-didier"))),
+        "rf_gpu_ncpu": rf_gpu_ncpu,
+        "rf_gpu_span": sh_quote(rf_gpu_span),
+        "rf_gpu_req": sh_quote(rf.get("gpu_req", afcyc.get("gpu_req", "num=1:aff=no"))),
         "rf_env": sh_quote(rf.get("env_name", "SE3nv")),
         "rf_dir": sh_quote(rf.get("rfdiffusion_dir", "$HOME/RFdiffusion")),
         "rf_n_shards": rf.get("n_shards", 10),
@@ -564,10 +631,18 @@ def build_values(config: dict) -> dict:
         "mpnn_seqs_per_struct": mpnn.get("seqs_per_struct", 1),
         "afcyc_gpu_queue": afcyc.get("gpu_queue", "8v100-32-sc"),
         "afcyc_cpu_queue": afcyc.get("cpu_queue", "33"),
+        "afcyc_gpu_ncpu": afcyc_gpu_ncpu,
+        "afcyc_cpu_ncpu": afcyc_cpu_ncpu,
+        "afcyc_gpu_span": sh_quote(afcyc_gpu_span),
+        "afcyc_cpu_span": sh_quote(afcyc_cpu_span),
+        "afcyc_gpu_req": sh_quote(afcyc.get("gpu_req", "num=1:aff=no")),
         "afcyc_env": sh_quote(afcyc.get("env_name", "afcycdesign")),
         "afcyc_script": sh_quote(afcyc.get("afcyc_script", f"{config['home_project_dir'].rstrip('/')}/3.AfCycDesign/v3/afcyc_predict_batch.py")),
         "afcyc_rmsd_script": sh_quote(afcyc.get("rmsd_script", f"{config['home_project_dir'].rstrip('/')}/3.AfCycDesign/v3/rmsd_from_afcyc.py")),
         "afcyc_merge_script": sh_quote(afcyc.get("merge_script", f"{config['home_project_dir'].rstrip('/')}/3.AfCycDesign/v3/merge_afcyc_csvs.py")),
+        "afcyc_script_bundle_name": Path(afcyc.get("local_afcyc_script", "afcyc_predict_batch.py")).name,
+        "afcyc_rmsd_script_bundle_name": Path(afcyc.get("local_rmsd_script", "rmsd_from_afcyc.py")).name,
+        "afcyc_merge_script_bundle_name": Path(afcyc.get("local_merge_script", "merge_afcyc_csvs.py")).name,
         "afcyc_n_shards": afcyc.get("n_shards", 15),
         "afcyc_num_recycles": afcyc.get("num_recycles", 3),
         "afcyc_num_models": afcyc.get("num_models", 1),
@@ -576,6 +651,8 @@ def build_values(config: dict) -> dict:
         "pyro_env": sh_quote(pyro.get("env_name", "PyRosettaScore")),
         "pyro_script": sh_quote(pyro.get("script", f"{config['home_project_dir'].rstrip('/')}/4.PyRosetta/PyRosetta_fullScoring_v4_debug.py")),
         "pyro_merge_script": sh_quote(pyro.get("merge_script", "$HOME/Exercise_Phase2_design/merge_pyrosetta_csvs.py")),
+        "pyro_script_bundle_name": Path(pyro.get("local_script", "PyRosetta_fullScoring_v4_debug.py")).name,
+        "pyro_merge_script_bundle_name": Path(pyro.get("local_merge_script", "merge_pyrosetta_csvs.py")).name,
         "pyro_n_shards": pyro.get("n_shards", 50),
         "pyro_ncpu": pyro.get("ncpu", 2),
         "pyro_ptile": pyro.get("ptile", 2),
@@ -599,6 +676,27 @@ def generate(config: dict, output_root: Path, force: bool) -> list[Path]:
     for path, template in files.items():
         write_file(path, render(template, values), force)
         written.append(path)
+    bundle_sources = {
+        target_root / "inputs" / values["input_pdb_bundle_name"]: config.get("local_input_pdb"),
+        target_root / "scripts" / values["afcyc_script_bundle_name"]: config["afcyc"].get("local_afcyc_script"),
+        target_root / "scripts" / values["afcyc_rmsd_script_bundle_name"]: config["afcyc"].get("local_rmsd_script"),
+        target_root / "scripts" / values["afcyc_merge_script_bundle_name"]: config["afcyc"].get("local_merge_script"),
+        target_root / "scripts" / values["pyro_script_bundle_name"]: config["pyrosetta"].get("local_script"),
+        target_root / "scripts" / values["pyro_merge_script_bundle_name"]: config["pyrosetta"].get("local_merge_script"),
+    }
+    missing = []
+    for destination, source in bundle_sources.items():
+        if not source:
+            missing.append(f"{destination}: no local source configured")
+            continue
+        source_path = resolve_local_path(source)
+        if not source_path.is_file():
+            missing.append(f"{source_path}")
+            continue
+        copy_file(source_path, destination, force)
+        written.append(destination)
+    if missing:
+        raise FileNotFoundError("Missing bundle source files:\n" + "\n".join(missing))
     return written
 
 

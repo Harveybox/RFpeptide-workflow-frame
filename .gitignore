@@ -1,4 +1,40 @@
-﻿__pycache__/
+# Python cache/build artifacts
+__pycache__/
 *.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# OS/editor noise
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
+
+# Local secrets and machine-specific profiles
+.env
+.env.*
+!.env.example
+credentials.local.json
+cluster_profile.local.json
+cluster_profiles/*.local.json
+configs/*.local.json
+
+# Runtime logs and ad-hoc downloads
+downloads/
+logs/
+*.log
+
+# Generated/retrieved compute artifacts
+generated_examples/*_workflow/
+generated_examples/**/retrieved_results/
+generated_examples/**/inputs/
+generated_examples/**/*.out
+generated_examples/**/*.err
+generated_examples/**/*.pdb
+generated_examples/**/*.cif
+inputs_preprocessed/
