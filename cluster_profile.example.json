@@ -1,0 +1,46 @@
+{
+  "host": "172.18.6.10",
+  "user": "bme-yaozm",
+  "port": 18188,
+  "auth_method": "password",
+  "remember_password": false,
+  "ssh_key": "C:/Users/usayz/.ssh/id_ed25519",
+  "remote_workflow_dir": "$HOME/RFpeptide-workflow-frame/PGLYRP1_workflow",
+  "remote_upload_parent": "$HOME/RFpeptide-workflow-frame",
+  "scratch_scan_roots": [
+    "/scratch/2026-05-24/bme-yaozm/PGLYRP1_test"
+  ],
+  "scratch_scan_max_depth": 8,
+  "job_log_scan_roots": [
+    "/scratch/2026-06-09/bme-yaozm/PGLYRP1_test"
+  ],
+  "job_log_scan_max_depth": 8,
+  "result_file_patterns": [
+    "*.csv",
+    "*.pdb",
+    "*.out",
+    "*.err",
+    "*.json",
+    "*.txt"
+  ],
+  "local_download_dir": "downloads/PGLYRP1",
+  "pymol_executable": "C:/Users/usayz/AppData/Local/Schrodinger/PyMOL2/PYMOLWin.exe",
+  "bjobs_user": "$USER",
+  "scratch_migration": {
+    "scratch_root": "/scratch",
+    "source_date": "2026-06-09",
+    "target_date": "auto",
+    "user_dir": "bme-yaozm"
+  },
+  "ssh_extra_args": [],
+  "stage_scripts": {
+    "RFDiffusion": "1.RFDiffusion/submit_PGLYRP1_rfdiffusion_pilot0.sh",
+    "ProteinMPNN": "2.ProteinMPNN/submit_PGLYRP1_mpnn_relax4_shards.sh",
+    "AfCycDesign": "3.AfCycDesign/submit_afcyc_shards_integrated.sh",
+    "PyRosetta": "4.PyRosetta/submit_pyrosetta_shards.sh"
+  },
+  "result_paths": [
+    "afcyc_out/pilot0/merged/results_merged.csv",
+    "pyrosetta_scores/pilot0/merged/pyrosetta_scores_merged.csv"
+  ]
+}
