@@ -1,0 +1,8 @@
+name: rfpeptide-workflow-frame
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - pip
+  - pip:
+      - paramiko>=3.4

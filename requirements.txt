@@ -1,0 +1,2 @@
+# Keep this in sync with environment.yml.
+paramiko>=3.4

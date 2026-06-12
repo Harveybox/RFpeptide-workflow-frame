@@ -142,8 +142,8 @@ def set_nested(data: dict, dotted_key: str, value):
 class WorkflowGui:
     def __init__(self, root: Tk):
         self.root = root
-        self.root.title("Binder workflow generator")
-        self.root.geometry("980x760")
+        self.root.title("RFpeptide Workflow")
+        self.root.geometry("1220x860")
         self.config_path = generate_workflow.DEFAULT_CONFIG
         self.output_dir = SCRIPT_DIR / "generated_examples"
         self.config_data = generate_workflow.load_config(self.config_path)
@@ -160,82 +160,203 @@ class WorkflowGui:
         self._load_values(self.config_data)
         self._log(f"Loaded config: {self.config_path}")
 
+    def _configure_theme(self):
+        self.colors = {
+            "app_bg": "#eef3f8",
+            "card_bg": "#ffffff",
+            "nav_bg": "#102a43",
+            "nav_hover": "#173c5e",
+            "nav_active": "#1f6feb",
+            "nav_text": "#dbeafe",
+            "header_bg": "#0f2742",
+            "header_text": "#f8fafc",
+            "muted": "#64748b",
+            "border": "#d7e0ea",
+            "primary": "#1f6feb",
+            "primary_dark": "#174ea6",
+            "text": "#1e293b",
+            "soft_blue": "#dbeafe",
+            "soft_panel": "#f8fafc",
+        }
+        self.root.configure(bg=self.colors["app_bg"])
+        self.root.option_add("*Font", "{Segoe UI} 9")
+        self.root.option_add("*Button.Background", "#f8fafc")
+        self.root.option_add("*Button.Foreground", self.colors["text"])
+        self.root.option_add("*Button.ActiveBackground", "#e2e8f0")
+        self.root.option_add("*Button.Relief", "flat")
+        self.root.option_add("*Button.BorderWidth", 1)
+        self.root.option_add("*Text.Background", "#fbfdff")
+        self.root.option_add("*Text.Foreground", self.colors["text"])
+        self.root.option_add("*Text.Relief", "solid")
+        self.root.option_add("*Text.BorderWidth", 1)
+        self.root.option_add("*Entry.Background", "#ffffff")
+        self.root.option_add("*Entry.Relief", "solid")
+        self.root.option_add("*Entry.BorderWidth", 1)
+        self.root.option_add("*Label.Background", self.colors["app_bg"])
+        self.root.option_add("*Frame.Background", self.colors["app_bg"])
+        self.root.option_add("*Labelframe.Background", self.colors["card_bg"])
+        self.root.option_add("*Labelframe.Foreground", self.colors["text"])
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+        style.configure("Treeview", rowheight=24, background="#ffffff", fieldbackground="#ffffff", foreground=self.colors["text"])
+        style.configure("Treeview.Heading", font="{Segoe UI} 9 bold", background="#e8eef6", foreground=self.colors["text"])
+        style.map("Treeview", background=[("selected", "#cfe3ff")], foreground=[("selected", "#0f172a")])
+        style.configure("TCombobox", fieldbackground="#ffffff", background="#ffffff")
+        style.configure("Vertical.TScrollbar", background="#d7e0ea")
+        style.configure("Horizontal.TScrollbar", background="#d7e0ea")
+
     def _build(self):
-        top = Frame(self.root)
-        top.pack(fill="x", padx=12, pady=10)
+        self._configure_theme()
 
         self.config_path_var = StringVar(value=str(self.config_path))
         self.output_dir_var = StringVar(value=str(self.output_dir))
         self.top_local_pdb_var = StringVar()
         self.current_project_var = StringVar(value="Current project: not loaded")
 
-        project_banner = Frame(top, bg="#17324d", bd=1, relief="solid")
-        project_banner.grid(row=0, column=0, columnspan=5, sticky="ew", pady=(0, 8))
-        Label(project_banner, text="CURRENT PROJECT CONFIG", bg="#17324d", fg="#ffffff").pack(side="left", padx=(10, 8), pady=7)
-        Label(project_banner, textvariable=self.current_project_var, bg="#17324d", fg="#d7f2ff", anchor="w").pack(side="left", fill="x", expand=True, padx=(0, 10), pady=7)
+        header = Frame(self.root, bg=self.colors["header_bg"])
+        header.pack(fill="x")
+        Label(
+            header,
+            text="RFpeptide Workflow",
+            bg=self.colors["header_bg"],
+            fg=self.colors["header_text"],
+            font="{Segoe UI} 15 bold",
+        ).pack(side="left", padx=16, pady=(10, 2))
+        Label(
+            header,
+            textvariable=self.current_project_var,
+            bg=self.colors["header_bg"],
+            fg="#bfdbfe",
+            anchor="e",
+        ).pack(side="right", fill="x", expand=True, padx=16, pady=(12, 2))
 
-        Label(top, text="Config").grid(row=1, column=0, sticky="w")
-        Entry(top, textvariable=self.config_path_var).grid(row=1, column=1, sticky="ew", padx=6)
-        Button(top, text="Open", command=self.open_config).grid(row=1, column=2, padx=3)
-        Button(top, text="Save", command=self.save_config).grid(row=1, column=3, padx=3)
-        Button(top, text="Save as", command=self.save_config_as).grid(row=1, column=4, padx=3)
-
-        Label(top, text="Local PDB").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        Entry(top, textvariable=self.top_local_pdb_var).grid(row=2, column=1, sticky="ew", padx=6, pady=(8, 0))
-        Button(top, text="Choose PDB", command=self.choose_local_input_pdb).grid(row=2, column=2, padx=3, pady=(8, 0))
-        Button(top, text="Preview/Clean", command=self.preview_top_local_pdb).grid(row=2, column=3, padx=3, pady=(8, 0))
-
-        Label(top, text="Output").grid(row=3, column=0, sticky="w", pady=(8, 0))
-        Entry(top, textvariable=self.output_dir_var).grid(row=3, column=1, sticky="ew", padx=6, pady=(8, 0))
-        Button(top, text="Choose", command=self.choose_output_dir).grid(row=3, column=2, padx=3, pady=(8, 0))
-        Button(top, text="Generate workflow", command=self.generate).grid(row=3, column=3, columnspan=2, sticky="ew", padx=3, pady=(8, 0))
+        top = Frame(self.root, bg=self.colors["card_bg"], bd=1, relief="solid")
+        top.pack(fill="x", padx=12, pady=(10, 8))
+        Label(top, text="Config", bg=self.colors["card_bg"], fg=self.colors["muted"]).grid(row=0, column=0, sticky="w", padx=(10, 4), pady=8)
+        Entry(top, textvariable=self.config_path_var).grid(row=0, column=1, sticky="ew", padx=6, pady=8)
+        Button(top, text="Open", command=self.open_config).grid(row=0, column=2, padx=3, pady=8)
+        Button(top, text="Save", command=self.save_config).grid(row=0, column=3, padx=3, pady=8)
+        Button(top, text="Save as", command=self.save_config_as).grid(row=0, column=4, padx=(3, 10), pady=8)
+        Label(top, text="Local PDB", bg=self.colors["card_bg"], fg=self.colors["muted"]).grid(row=1, column=0, sticky="w", padx=(10, 4), pady=(0, 8))
+        Entry(top, textvariable=self.top_local_pdb_var).grid(row=1, column=1, sticky="ew", padx=6, pady=(0, 8))
+        Button(top, text="Choose PDB", command=self.choose_local_input_pdb).grid(row=1, column=2, padx=3, pady=(0, 8))
+        Button(top, text="Preview/Clean", command=self.preview_top_local_pdb).grid(row=1, column=3, padx=3, pady=(0, 8))
+        Label(top, text="Output", bg=self.colors["card_bg"], fg=self.colors["muted"]).grid(row=2, column=0, sticky="w", padx=(10, 4), pady=(0, 8))
+        Entry(top, textvariable=self.output_dir_var).grid(row=2, column=1, sticky="ew", padx=6, pady=(0, 8))
+        Button(top, text="Choose", command=self.choose_output_dir).grid(row=2, column=2, padx=3, pady=(0, 8))
+        generate_button = Button(top, text="Generate workflow", command=self.generate, bg=self.colors["primary"], fg="#ffffff", activebackground=self.colors["primary_dark"])
+        generate_button.grid(row=2, column=3, columnspan=2, sticky="ew", padx=(3, 10), pady=(0, 8))
         top.columnconfigure(1, weight=1)
 
-        notebook = ttk.Notebook(self.root)
-        self.notebook = notebook
-        notebook.pack(fill="both", expand=True, padx=12, pady=(0, 10))
+        shell = Frame(self.root, bg=self.colors["app_bg"])
+        shell.pack(fill="both", expand=True, padx=12, pady=(0, 10))
+        shell.columnconfigure(1, weight=1)
+        shell.rowconfigure(0, weight=1)
 
-        self.pdb_preprocess_frame = Frame(notebook)
-        notebook.add(self.pdb_preprocess_frame, text="PDB Preprocess")
-        self._build_pdb_preprocess(self.pdb_preprocess_frame)
+        self.nav_frame = Frame(shell, bg=self.colors["nav_bg"], width=210)
+        self.nav_frame.grid(row=0, column=0, sticky="nsw")
+        self.nav_frame.grid_propagate(False)
+        self.page_container = Frame(shell, bg=self.colors["app_bg"])
+        self.page_container.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        self.page_container.rowconfigure(0, weight=1)
+        self.page_container.columnconfigure(0, weight=1)
+        self.page_frames = {}
+        self.nav_buttons = {}
 
+        self.pdb_preprocess_frame = self._create_page("PDB Preprocess", "PDB Preprocess", "Preview and clean input structures before workflow generation.", self._build_pdb_preprocess)
         for group_name, fields in FIELD_GROUPS:
-            frame = Frame(notebook)
-            notebook.add(frame, text=group_name)
-            self._build_group(frame, group_name, fields)
+            self._create_page(group_name, group_name, "Edit target-specific workflow parameters.", lambda parent, name=group_name, group_fields=fields: self._build_group(parent, name, group_fields))
         for traced_key in ("target", "pilot", "scratch_date", "project_dir_name"):
             if traced_key in self.variables:
                 self.variables[traced_key][0].trace_add("write", lambda *_: self._update_current_project_banner())
-        cluster_settings_frame = Frame(notebook)
-        notebook.add(cluster_settings_frame, text="Cluster Settings")
+        cluster_settings_frame = self._create_page("Cluster Settings", "Cluster Settings", "Connection, authentication, scan, and local tool settings.", self._build_cluster_settings)
         self.cluster_settings_frame = cluster_settings_frame
-        self._build_cluster_settings(cluster_settings_frame)
-        cluster_frame = Frame(notebook)
-        notebook.add(cluster_frame, text="Cluster Dashboard")
-        self._build_cluster_dashboard(cluster_frame)
-        results_frame = Frame(notebook)
-        notebook.add(results_frame, text="Results Browser")
-        self._build_results_browser(results_frame)
-        data_frame = Frame(notebook)
-        notebook.add(data_frame, text="Data Processing")
-        self._build_data_processing(data_frame)
-        scratch_frame = Frame(notebook)
-        notebook.add(scratch_frame, text="Scratch Safety")
-        self._build_scratch_safety(scratch_frame)
+        self._create_page("Cluster Dashboard", "Cluster Dashboard", "Submit, monitor, inspect, and stop cluster jobs.", self._build_cluster_dashboard)
+        self._create_page("Results Browser", "Results Browser", "Scan scratch, filter outputs, download results, and preview files.", self._build_results_browser)
+        self._create_page("Data Processing", "Data Processing", "Preview merged CSV files, plot metrics, and shortlist candidates.", self._build_data_processing)
+        self._create_page("Scratch Safety", "Scratch Safety", "Move scratch date folders safely to avoid cluster cleanup.", self._build_scratch_safety)
 
-        log_frame = LabelFrame(self.root, text="Log")
-        log_frame.pack(fill="both", expand=False, padx=12, pady=(0, 12))
+        self._build_navigation([
+            ("Run", ["Cluster Dashboard", "Results Browser", "Data Processing"]),
+            ("Configure", ["Project", "RFDiffusion", "ProteinMPNN", "AfCycDesign", "PyRosetta", "PDB Preprocess", "Cluster Settings"]),
+            ("Maintenance", ["Scratch Safety"]),
+        ])
+        self._show_page("Cluster Dashboard")
+
+        log_frame = LabelFrame(self.root, text="Log", bg=self.colors["card_bg"], fg=self.colors["text"])
+        log_frame.pack(fill="both", expand=False, padx=12, pady=(0, 8))
         self.log_text = Text(log_frame, height=6, wrap="word")
         self.log_text.pack(fill="both", expand=True, padx=6, pady=6)
 
-        raw_frame = LabelFrame(self.root, text="Raw SSH/LSF output")
+        raw_frame = LabelFrame(self.root, text="Raw SSH/LSF output", bg=self.colors["card_bg"], fg=self.colors["text"])
         raw_frame.pack(fill="both", expand=False, padx=12, pady=(0, 12))
-        raw_toolbar = Frame(raw_frame)
+        raw_toolbar = Frame(raw_frame, bg=self.colors["card_bg"])
         raw_toolbar.pack(fill="x", padx=6, pady=(6, 0))
         Button(raw_toolbar, text="Clear raw output", command=self.clear_raw_output).pack(side="left", padx=(0, 4))
         Button(raw_toolbar, text="Open debug log folder", command=self.open_debug_log_folder).pack(side="left", padx=4)
         self.raw_output_text = Text(raw_frame, height=8, wrap="none")
         self.raw_output_text.pack(fill="both", expand=True, padx=6, pady=6)
+
+    def _create_page(self, key: str, title: str, subtitle: str, builder):
+        page = Frame(self.page_container, bg=self.colors["app_bg"])
+        page.grid(row=0, column=0, sticky="nsew")
+        page.columnconfigure(0, weight=1)
+        page.rowconfigure(1, weight=1)
+        header = Frame(page, bg=self.colors["app_bg"])
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        Label(header, text=title, bg=self.colors["app_bg"], fg=self.colors["text"], font="{Segoe UI} 14 bold").pack(anchor="w")
+        Label(header, text=subtitle, bg=self.colors["app_bg"], fg=self.colors["muted"]).pack(anchor="w", pady=(2, 0))
+        body = Frame(page, bg=self.colors["app_bg"])
+        body.grid(row=1, column=0, sticky="nsew")
+        self.page_frames[key] = page
+        builder(body)
+        return page
+
+    def _build_navigation(self, sections: list[tuple[str, list[str]]]):
+        Label(
+            self.nav_frame,
+            text="WORKFLOW",
+            bg=self.colors["nav_bg"],
+            fg="#93c5fd",
+            font="{Segoe UI} 9 bold",
+        ).pack(anchor="w", padx=14, pady=(16, 8))
+        for section_title, page_keys in sections:
+            Label(
+                self.nav_frame,
+                text=section_title.upper(),
+                bg=self.colors["nav_bg"],
+                fg="#7dd3fc",
+                font="{Segoe UI} 8 bold",
+            ).pack(anchor="w", padx=14, pady=(12, 4))
+            for page_key in page_keys:
+                button = Button(
+                    self.nav_frame,
+                    text=page_key,
+                    anchor="w",
+                    bd=0,
+                    relief="flat",
+                    bg=self.colors["nav_bg"],
+                    fg=self.colors["nav_text"],
+                    activebackground=self.colors["nav_hover"],
+                    activeforeground="#ffffff",
+                    command=lambda key=page_key: self._show_page(key),
+                )
+                button.pack(fill="x", padx=8, pady=1, ipady=7)
+                self.nav_buttons[page_key] = button
+
+    def _show_page(self, key: str):
+        frame = self.page_frames.get(key)
+        if not frame:
+            return
+        frame.tkraise()
+        for page_key, button in self.nav_buttons.items():
+            if page_key == key:
+                button.configure(bg=self.colors["nav_active"], fg="#ffffff")
+            else:
+                button.configure(bg=self.colors["nav_bg"], fg=self.colors["nav_text"])
 
     def _build_status_bar(self, parent: Frame, variable: StringVar, title: str = "Status") -> Frame:
         frame = Frame(parent, bg="#fff3cd", bd=1, relief="solid")
@@ -463,6 +584,14 @@ class WorkflowGui:
 
         self.stage_var = StringVar(value="RFDiffusion")
         self.auto_refresh_var = BooleanVar(value=False)
+        self.job_entries = []
+        self.job_entries_by_iid = {}
+        self.job_filter_var = StringVar()
+        self.job_status_filter_var = StringVar(value="All")
+        self.job_summary_var = StringVar(value="Jobs not loaded")
+        self.job_selection_var = StringVar(value="Selected: 0")
+        self.job_sort_column = "jobid"
+        self.job_sort_reverse = False
 
         settings_link = LabelFrame(body, text="Cluster settings")
         settings_link.pack(fill="x", pady=(0, 8))
@@ -496,14 +625,62 @@ class WorkflowGui:
         Button(jobs_toolbar, text="Kill selected", command=self.kill_selected_jobs).pack(side="left", padx=4)
         Button(jobs_toolbar, text="Kill all visible", command=self.kill_all_visible_jobs).pack(side="left", padx=4)
         Checkbutton(jobs_toolbar, text="Auto refresh every 10s", variable=self.auto_refresh_var, command=self._schedule_auto_refresh).pack(side="left", padx=12)
+        Label(jobs_toolbar, text="Search").pack(side="left", padx=(10, 4))
+        Entry(jobs_toolbar, textvariable=self.job_filter_var, width=24).pack(side="left", padx=(0, 8))
+        Label(jobs_toolbar, text="Status").pack(side="left", padx=(0, 4))
+        self.job_status_box = ttk.Combobox(jobs_toolbar, textvariable=self.job_status_filter_var, values=["All"], state="readonly", width=10)
+        self.job_status_box.pack(side="left")
+        Label(jobs_toolbar, textvariable=self.job_selection_var, fg=self.colors["muted"]).pack(side="right", padx=6)
+        self.job_filter_var.trace_add("write", lambda *_: self._apply_job_filter())
+        self.job_status_filter_var.trace_add("write", lambda *_: self._apply_job_filter())
 
-        columns = ("jobid", "stat", "queue", "job_name", "exec_host", "user")
-        self.jobs_tree = ttk.Treeview(jobs_frame, columns=columns, show="headings", selectmode="extended", height=10)
+        self._build_status_bar(jobs_frame, self.job_summary_var, "Jobs").pack(fill="x", padx=6, pady=(0, 6))
+
+        jobs_table = Frame(jobs_frame)
+        jobs_table.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+        jobs_table.rowconfigure(0, weight=1)
+        jobs_table.columnconfigure(0, weight=1)
+
+        columns = ("jobid", "stat", "queue", "job_name", "exec_host", "submit_time", "user")
+        labels = {
+            "jobid": "Job ID",
+            "stat": "Status",
+            "queue": "Queue",
+            "job_name": "Job name",
+            "exec_host": "Exec host",
+            "submit_time": "Submit time",
+            "user": "User",
+        }
+        widths = {
+            "jobid": 95,
+            "stat": 78,
+            "queue": 120,
+            "job_name": 320,
+            "exec_host": 220,
+            "submit_time": 150,
+            "user": 110,
+        }
+        self.jobs_tree = ttk.Treeview(jobs_table, columns=columns, show="headings", selectmode="extended", height=12)
+        jobs_y_scroll = ttk.Scrollbar(jobs_table, orient="vertical", command=self.jobs_tree.yview)
+        jobs_x_scroll = ttk.Scrollbar(jobs_table, orient="horizontal", command=self.jobs_tree.xview)
+        self.jobs_tree.configure(yscrollcommand=jobs_y_scroll.set, xscrollcommand=jobs_x_scroll.set)
         for column in columns:
-            self.jobs_tree.heading(column, text=column)
-            width = 90 if column not in {"job_name", "exec_host"} else 240
-            self.jobs_tree.column(column, width=width, anchor="w")
-        self.jobs_tree.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+            self.jobs_tree.heading(column, text=labels[column], command=lambda selected_column=column: self._sort_jobs(selected_column))
+            self.jobs_tree.column(column, width=widths[column], minwidth=70, anchor="w", stretch=False)
+        self.jobs_tree.tag_configure("job_run", background="#e7f6e7")
+        self.jobs_tree.tag_configure("job_pend", background="#fff4d6")
+        self.jobs_tree.tag_configure("job_exit", background="#fde2e1")
+        self.jobs_tree.tag_configure("job_done", background="#eef2f7")
+        self.jobs_tree.grid(row=0, column=0, sticky="nsew")
+        jobs_y_scroll.grid(row=0, column=1, sticky="ns")
+        jobs_x_scroll.grid(row=1, column=0, sticky="ew")
+        self.jobs_tree.bind("<<TreeviewSelect>>", self._update_job_selection_detail)
+
+        detail_frame = LabelFrame(jobs_frame, text="Selected job summary")
+        detail_frame.pack(fill="x", padx=6, pady=(0, 6))
+        self.job_detail_text = Text(detail_frame, height=4, wrap="word")
+        self.job_detail_text.pack(fill="x", padx=6, pady=6)
+        self.job_detail_text.insert(END, "Select a job to inspect its parsed bjobs row. Use View bjobs -l for full pending reason and LSF details.")
 
     def _build_results_browser(self, parent: Frame):
         body = Frame(parent)
@@ -638,7 +815,7 @@ class WorkflowGui:
         self.data_hist_min_var = StringVar()
         self.data_hist_max_var = StringVar()
         self.data_robust_hist_var = BooleanVar(value=True)
-        self.data_status_var = StringVar(value="No merged CSV loaded")
+        self.data_status_var = StringVar(value="No merged CSV loaded. Steps: scan -> load for analysis -> plot histogram + scatter.")
 
         scan_frame = LabelFrame(body, text="Merged CSV scan")
         scan_frame.pack(fill="x", pady=(0, 8))
@@ -690,20 +867,44 @@ class WorkflowGui:
         Label(analysis_frame, text="Hist max").grid(row=1, column=2, sticky="w", padx=6, pady=(0, 6))
         Entry(analysis_frame, textvariable=self.data_hist_max_var, width=12).grid(row=1, column=3, sticky="w", padx=6, pady=(0, 6))
         Checkbutton(analysis_frame, text="Auto robust range 1-99% when min/max blank", variable=self.data_robust_hist_var).grid(row=1, column=4, columnspan=4, sticky="w", padx=6, pady=(0, 6))
-        Button(analysis_frame, text="Analyze metric", command=self.analyze_data_metric).grid(row=2, column=0, padx=6, pady=(0, 6))
-        self._build_status_bar(analysis_frame, self.data_status_var, "Data").grid(row=2, column=1, columnspan=7, sticky="ew", padx=6, pady=(0, 6))
+        Button(
+            analysis_frame,
+            text="Plot histogram + scatter",
+            command=self.analyze_data_metric,
+            bg=self.colors["primary"],
+            fg="#ffffff",
+            activebackground=self.colors["primary_dark"],
+        ).grid(row=2, column=0, columnspan=2, sticky="ew", padx=6, pady=(0, 6))
+        self._build_status_bar(analysis_frame, self.data_status_var, "Data").grid(row=2, column=2, columnspan=6, sticky="ew", padx=6, pady=(0, 6))
         analysis_frame.columnconfigure(1, weight=1)
 
         plot_frame = LabelFrame(body, text="Metric plots")
         plot_frame.pack(fill="both", expand=True, pady=(0, 8))
+        plot_toolbar = Frame(plot_frame)
+        plot_toolbar.pack(fill="x", padx=6, pady=(6, 0))
+        Button(
+            plot_toolbar,
+            text="Draw / refresh histogram + scatter",
+            command=self.analyze_data_metric,
+            bg=self.colors["primary"],
+            fg="#ffffff",
+            activebackground=self.colors["primary_dark"],
+        ).pack(side="left", padx=(0, 8))
+        Label(
+            plot_toolbar,
+            text="Load a merged CSV, choose a metric, then click this button to render both plots.",
+            fg=self.colors["muted"],
+        ).pack(side="left")
         hist_frame = LabelFrame(plot_frame, text="Histogram")
         hist_frame.pack(side="left", fill="both", expand=True, padx=(6, 3), pady=6)
         self.data_hist_canvas = Canvas(hist_frame, height=260, bg="white")
         self.data_hist_canvas.pack(fill="both", expand=True, padx=6, pady=6)
+        self.data_hist_canvas.create_text(240, 130, text="Histogram will appear after plotting.", fill="#64748b")
         scatter_frame = LabelFrame(plot_frame, text="Scatter by CSV order")
         scatter_frame.pack(side="left", fill="both", expand=True, padx=(3, 6), pady=6)
         self.data_scatter_canvas = Canvas(scatter_frame, height=260, bg="white")
         self.data_scatter_canvas.pack(fill="both", expand=True, padx=6, pady=6)
+        self.data_scatter_canvas.create_text(240, 130, text="Scatter plot will appear after plotting.", fill="#64748b")
 
         candidates_frame = LabelFrame(body, text="Candidate rows within display range above percentile/custom threshold")
         candidates_frame.pack(fill="both", expand=True)
@@ -782,8 +983,7 @@ class WorkflowGui:
         return cluster_ops.default_profile()
 
     def show_cluster_settings(self):
-        if hasattr(self, "cluster_settings_frame"):
-            self.notebook.select(self.cluster_settings_frame)
+        self._show_page("Cluster Settings")
 
     def _load_cluster_settings_vars(self):
         if not hasattr(self, "cluster_host_var"):
@@ -1011,7 +1211,7 @@ class WorkflowGui:
             if not path_text:
                 return
         self.pdb_raw_path_var.set(path_text)
-        self.notebook.select(self.pdb_preprocess_frame)
+        self._show_page("PDB Preprocess")
         self.preview_preprocess_pdb()
 
     def choose_preprocess_pdb(self):
@@ -1453,19 +1653,24 @@ class WorkflowGui:
         self._run_background(f"Submit {stage_name}", lambda: cluster_ops.submit_stage(profile, stage_name), on_success)
 
     def refresh_jobs(self):
+        if hasattr(self, "job_summary_var"):
+            self.job_summary_var.set("Running: refreshing jobs from cluster...")
+
         def worker():
             return cluster_ops.list_jobs(self._collect_cluster_profile())
 
         def on_success(result):
             command_result, jobs = result
             self._log(f"Refresh jobs exit {command_result.returncode}; {len(jobs)} jobs visible.")
+            self._populate_jobs(jobs)
             if not jobs:
                 detail = (command_result.stdout.strip() or command_result.stderr.strip())
                 if detail:
                     self._log("No jobs were parsed from bjobs output; check Raw SSH/LSF output.")
+                    self.job_summary_var.set("Jobs loaded: no parsed jobs; check Raw SSH/LSF output for bjobs text.")
                 else:
                     self._log("bjobs returned no visible jobs for the configured user.")
-            self._populate_jobs(jobs)
+                    self.job_summary_var.set("Jobs loaded: no visible jobs for the configured user.")
 
         self._run_background("Refresh jobs", worker, on_success)
 
@@ -1654,7 +1859,10 @@ class WorkflowGui:
         self.data_metric_box.configure(values=numeric_headers)
         if self.data_metric_var.get() not in numeric_headers:
             self.data_metric_var.set(numeric_headers[0])
-        self.data_status_var.set(f"Loaded {path.name}; {len(numeric_headers)} numeric columns from {sampled_rows} sampled rows")
+        self.data_status_var.set(
+            f"Loaded {path.name}; {len(numeric_headers)} numeric columns from {sampled_rows} sampled rows. "
+            "Select a metric, then click Plot histogram + scatter."
+        )
 
     def _detect_numeric_csv_headers(self, path: Path, sample_limit: int = 5000) -> tuple[list[str], int]:
         with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
@@ -2003,18 +2211,134 @@ class WorkflowGui:
         return max(width, 260), max(height, 200)
 
     def _populate_jobs(self, jobs: list[dict]):
+        self.job_entries = list(jobs)
+        self._refresh_job_status_filter_values()
+        self._apply_job_filter()
+
+    def _refresh_job_status_filter_values(self):
+        statuses = sorted({str(job.get("stat") or "").strip() for job in self.job_entries if str(job.get("stat") or "").strip()})
+        values = ["All"] + statuses
+        if hasattr(self, "job_status_box"):
+            self.job_status_box.configure(values=values)
+        if hasattr(self, "job_status_filter_var") and self.job_status_filter_var.get() not in values:
+            self.job_status_filter_var.set("All")
+
+    def _apply_job_filter(self):
+        if not hasattr(self, "jobs_tree"):
+            return
         for item in self.jobs_tree.get_children():
             self.jobs_tree.delete(item)
-        for job in jobs:
+        self.job_entries_by_iid = {}
+        query = self.job_filter_var.get().strip().lower() if hasattr(self, "job_filter_var") else ""
+        status_filter = self.job_status_filter_var.get() if hasattr(self, "job_status_filter_var") else "All"
+        visible_jobs = []
+        for index, job in enumerate(self.job_entries):
+            if status_filter != "All" and str(job.get("stat") or "") != status_filter:
+                continue
+            haystack = " ".join(str(job.get(key, "")) for key in ("jobid", "stat", "queue", "job_name", "exec_host", "submit_time", "user", "raw")).lower()
+            if query and query not in haystack:
+                continue
+            visible_jobs.append(job)
+            iid = self._job_tree_iid(job, index)
+            self.job_entries_by_iid[iid] = job
+            status_tag = self._job_status_tag(str(job.get("stat") or ""))
             self.jobs_tree.insert(
                 "",
                 END,
-                iid=job["jobid"],
-                values=(job["jobid"], job["stat"], job["queue"], job["job_name"], job["exec_host"], job["user"]),
+                iid=iid,
+                values=(
+                    job.get("jobid", ""),
+                    job.get("stat", ""),
+                    job.get("queue", ""),
+                    job.get("job_name", ""),
+                    job.get("exec_host", ""),
+                    job.get("submit_time", ""),
+                    job.get("user", ""),
+                ),
+                tags=(status_tag,) if status_tag else (),
             )
+        self._update_job_summary(visible_jobs)
+        self._update_job_selection_detail()
+
+    def _job_tree_iid(self, job: dict, index: int) -> str:
+        base = str(job.get("jobid") or f"job_{index}")
+        if base not in self.job_entries_by_iid:
+            return base
+        return f"{base}#{index}"
+
+    def _job_status_tag(self, status: str) -> str:
+        normalized = status.upper()
+        if normalized == "RUN":
+            return "job_run"
+        if normalized == "PEND":
+            return "job_pend"
+        if normalized in {"EXIT", "ZOMBI"}:
+            return "job_exit"
+        if normalized in {"DONE", "PSUSP", "USUSP", "SSUSP"}:
+            return "job_done"
+        return ""
+
+    def _sort_jobs(self, column: str):
+        if self.job_sort_column == column:
+            self.job_sort_reverse = not self.job_sort_reverse
+        else:
+            self.job_sort_column = column
+            self.job_sort_reverse = False
+        self.job_entries.sort(key=lambda job: self._job_sort_value(job, column), reverse=self.job_sort_reverse)
+        self._apply_job_filter()
+
+    def _job_sort_value(self, job: dict, column: str):
+        value = str(job.get(column) or "")
+        if column == "jobid":
+            number = value.split("[", 1)[0].split("#", 1)[0]
+            if number.isdigit():
+                return int(number)
+        return value.lower()
+
+    def _update_job_summary(self, visible_jobs: list[dict]):
+        if not hasattr(self, "job_summary_var"):
+            return
+        counts = {}
+        for job in self.job_entries:
+            status = str(job.get("stat") or "UNKNOWN")
+            counts[status] = counts.get(status, 0) + 1
+        count_text = ", ".join(f"{key}={counts[key]}" for key in sorted(counts)) if counts else "no jobs"
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.job_summary_var.set(f"Jobs loaded: total={len(self.job_entries)}, visible={len(visible_jobs)} | {count_text} | refreshed {timestamp}")
+
+    def _update_job_selection_detail(self, _event=None):
+        if not hasattr(self, "jobs_tree"):
+            return
+        selected_iids = list(self.jobs_tree.selection())
+        if hasattr(self, "job_selection_var"):
+            self.job_selection_var.set(f"Selected: {len(selected_iids)}")
+        if not hasattr(self, "job_detail_text"):
+            return
+        self.job_detail_text.delete("1.0", END)
+        if not selected_iids:
+            self.job_detail_text.insert(END, "Select a job to inspect its parsed bjobs row. Use View bjobs -l for full pending reason and LSF details.")
+            return
+        if len(selected_iids) > 1:
+            job_ids = [str(self.job_entries_by_iid.get(iid, {}).get("jobid", iid)) for iid in selected_iids]
+            self.job_detail_text.insert(END, f"{len(selected_iids)} jobs selected:\n" + ", ".join(job_ids[:40]))
+            if len(job_ids) > 40:
+                self.job_detail_text.insert(END, f"\n... {len(job_ids) - 40} more")
+            return
+        job = self.job_entries_by_iid.get(selected_iids[0], {})
+        lines = [
+            f"Job ID: {job.get('jobid', '')}    Status: {job.get('stat', '')}    Queue: {job.get('queue', '')}",
+            f"Name: {job.get('job_name', '')}",
+            f"User: {job.get('user', '')}    From: {job.get('from_host', '')}    Exec: {job.get('exec_host', '')}    Submit: {job.get('submit_time', '')}",
+            f"Raw: {job.get('raw', '')}",
+        ]
+        self.job_detail_text.insert(END, "\n".join(lines))
 
     def _selected_job_ids(self) -> list[str]:
-        return list(self.jobs_tree.selection())
+        selected = []
+        for iid in self.jobs_tree.selection():
+            job = self.job_entries_by_iid.get(iid)
+            selected.append(str(job.get("jobid") if job else iid).split("#", 1)[0])
+        return selected
 
     def kill_selected_jobs(self):
         job_ids = self._selected_job_ids()
@@ -2026,7 +2350,10 @@ class WorkflowGui:
         self._run_background("Kill selected jobs", lambda: cluster_ops.kill_jobs(self._collect_cluster_profile(), job_ids), lambda _: self.refresh_jobs())
 
     def kill_all_visible_jobs(self):
-        job_ids = list(self.jobs_tree.get_children())
+        job_ids = []
+        for iid in self.jobs_tree.get_children():
+            job = self.job_entries_by_iid.get(iid)
+            job_ids.append(str(job.get("jobid") if job else iid).split("#", 1)[0])
         if not job_ids:
             messagebox.showinfo("No jobs visible", "Refresh jobs first.")
             return
