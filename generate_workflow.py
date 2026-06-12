@@ -8,7 +8,7 @@ from string import Template
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG = SCRIPT_DIR / "configs" / "PGLYRP1.json"
+DEFAULT_CONFIG = SCRIPT_DIR / "configs" / "DUMMY_TARGET.json"
 
 
 def load_config(path: Path) -> dict:

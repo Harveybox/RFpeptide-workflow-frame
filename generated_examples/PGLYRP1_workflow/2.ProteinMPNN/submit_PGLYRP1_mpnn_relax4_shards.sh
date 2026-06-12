@@ -9,8 +9,8 @@ ENV_NAME="proteinmpnn_binder_design"
 SCRIPT="$HOME/dl_binder_design/mpnn_fr/dl_interface_design.py"
 PYTHON_BIN="$($MICROMAMBA run -n "$ENV_NAME" which python)"
 
-INPUT_DIR="/scratch/2026-05-24/bme-yaozm/PGLYRP1_test"/example_outputs/pilot0
-OUT_DIR="/scratch/2026-05-24/bme-yaozm/PGLYRP1_test"/mpnn_relax4_out/pilot0
+INPUT_DIR="/scratch/2026-06-09/bme-yaozm/PGLYRP1_test"/example_outputs/pilot0
+OUT_DIR="/scratch/2026-06-09/bme-yaozm/PGLYRP1_test"/mpnn_relax4_out/pilot0
 
 RUNLIST_DIR="$OUT_DIR/runlists"
 CHECKPOINT_DIR="$OUT_DIR/checkpoints"

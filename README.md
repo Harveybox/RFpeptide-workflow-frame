@@ -1,5 +1,36 @@
 # RFpeptide workflow frame
 
+## Release packaging
+
+The public release package is built from a safe allowlist. It includes source code, `configs/DUMMY_TARGET.json`, `cluster_profile.example.json`, and the small files under `examples/`. It excludes local credentials, real PDB/CIF files, generated workflows, retrieved results, logs, and `cluster_profile.local.json`.
+
+Build a local release zip:
+
+```powershell
+python .\scripts\build_release.py
+```
+
+The generated archives are written to:
+
+```text
+dist/RFpeptide-workflow-frame-v<version>.zip
+dist/RFpeptide-workflow-frame-latest.zip
+```
+
+Before publishing, check that no real target configuration, password file, scratch output, or retrieved result has been manually added to git.
+
+## Cluster Settings page
+
+Cluster connection editing has been moved out of `Cluster Dashboard` into the dedicated `Cluster Settings` tab. Use this page to edit:
+
+- SSH host, user, port, private key, and authentication mode.
+- Password login and local encrypted password storage.
+- Remote upload parent and workflow directory fallback.
+- PyMOL executable path and `bjobs` user.
+- Result scan depth, log scan depth, result file patterns, and extra SSH args.
+
+`Cluster Dashboard` is now reserved for runtime operations: test connection, upload workflow, submit stage, refresh jobs, inspect pending reasons, and kill jobs.
+
 用于把 RFdiffusion → ProteinMPNN/relax → AfCycDesign/RMSD → PyRosetta 的 peptide binder 设计流程标准化，并通过本地 GUI 管理参数、生成脚本、提交集群任务、查看任务状态和下载结果。
 
 ## 计算与设计原理

@@ -1,24 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
-GPU_QUEUE="${GPU_QUEUE:-8v100-32-sc}"
-GPU_NCPU="${GPU_NCPU:-1}"
-GPU_PTILE="${GPU_PTILE:-1}"
-GPU_REQ='num=1/host'
+WORKFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GPU_QUEUE=hgx-aais-didier
+GPU_NCPU=8
+GPU_REQ="num=1:aff=no"
+GPU_SPAN="span[ptile=8]"
 
-CPU_QUEUE="${CPU_QUEUE:-33}"
-CPU_NCPU="${CPU_NCPU:-1}"
-CPU_PTILE="${CPU_PTILE:-1}"
+CPU_QUEUE=33
+CPU_NCPU=8
+CPU_SPAN="span[ptile=8]"
 
-N_SHARDS="${N_SHARDS:-15}"
+N_SHARDS=15
 MICROMAMBA="$HOME/bin/micromamba"
 ENV_NAME="afcycdesign"
-AFCYC_SCRIPT="$HOME/Test3_PGLYRP1/3.AfCycDesign/v3/afcyc_predict_batch.py"
-RMSD_SCRIPT="$HOME/Test3_PGLYRP1/3.AfCycDesign/v3/rmsd_from_afcyc.py"
-MERGE_SCRIPT="$HOME/Test3_PGLYRP1/3.AfCycDesign/v3/merge_afcyc_csvs.py"
+AFCYC_SCRIPT="$WORKFLOW_DIR/scripts/afcyc_predict_batch.py"
+RMSD_SCRIPT="$WORKFLOW_DIR/scripts/rmsd_from_afcyc.py"
+MERGE_SCRIPT="$WORKFLOW_DIR/scripts/merge_afcyc_csvs.py"
 
-INPUT_DIR="/scratch/2026-05-24/bme-yaozm/PGLYRP1_test"/mpnn_relax4_out/pilot0
-OUT_BASE="/scratch/2026-05-24/bme-yaozm/PGLYRP1_test"/afcyc_out/pilot0
+INPUT_DIR="/scratch/2026-06-09/bme-yaozm/PGLYRP1_test"/mpnn_relax4_out/pilot0
+OUT_BASE="/scratch/2026-06-09/bme-yaozm/PGLYRP1_test"/afcyc_out/pilot0
 AF_PARAMS_DIR="$HOME/dl_binder_design/af2_initial_guess/model_weights/params"
 
 TARGET_CHAIN="A"
@@ -32,6 +33,9 @@ MERGED_DIR="$OUT_BASE/merged"
 
 mkdir -p "$RUNLIST_DIR" "$SHARD_INPUT_ROOT" "$SHARD_RESULT_ROOT" "$LOG_DIR" "$MERGED_DIR"
 ALL_TAGS="$RUNLIST_DIR/all_tags.txt"
+
+echo "AfCyc GPU resource request: queue=${GPU_QUEUE}, ncpu=${GPU_NCPU}, span=${GPU_SPAN}, gpu=${GPU_REQ}"
+echo "AfCyc CPU resource request: queue=${CPU_QUEUE}, ncpu=${CPU_NCPU}, span=${CPU_SPAN}"
 
 python3 - <<'PY' "$INPUT_DIR" "$ALL_TAGS"
 import sys, os, glob
@@ -88,9 +92,9 @@ for RUNLIST in "$RUNLIST_DIR"/runlist_*.txt; do
 #!/bin/bash
 #BSUB -J pglyrp1_afcyc_${shard}
 #BSUB -q ${GPU_QUEUE}
-#BSUB -n ${GPU_NCPU}
-#BSUB -R "span[ptile=${GPU_PTILE}]"
-#BSUB -gpu "${GPU_REQ}"
+#BSUB -n 8
+#BSUB -R "span[ptile=8]"
+#BSUB -gpu "num=1:aff=no"
 #BSUB -o ${LOG_DIR}/${shard}.afcyc.%J.out
 #BSUB -e ${LOG_DIR}/${shard}.afcyc.%J.err
 set -euo pipefail
@@ -115,8 +119,8 @@ EOF
 #!/bin/bash
 #BSUB -J pglyrp1_rmsd_${shard}
 #BSUB -q ${CPU_QUEUE}
-#BSUB -n ${CPU_NCPU}
-#BSUB -R "span[ptile=${CPU_PTILE}]"
+#BSUB -n 8
+#BSUB -R "span[ptile=8]"
 #BSUB -o ${LOG_DIR}/${shard}.rmsd.%J.out
 #BSUB -e ${LOG_DIR}/${shard}.rmsd.%J.err
 set -euo pipefail

@@ -1,17 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
+WORKFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 QUEUE="${QUEUE:-33}"
 N_SHARDS="${N_SHARDS:-50}"
+WAIT_FOR_STABLE_INPUT="${WAIT_FOR_STABLE_INPUT:-1}"
+INPUT_STABILITY_SECONDS="${INPUT_STABILITY_SECONDS:-30}"
 
 MICROMAMBA="$HOME/bin/micromamba"
 ENV_NAME="PyRosettaScore"
 PYTHON_BIN="$($MICROMAMBA run -n "$ENV_NAME" which python)"
-SCRIPT="$HOME/Test3_PGLYRP1/4.PyRosetta/PyRosetta_fullScoring_v4_debug.py"
-MERGE_SCRIPT="$HOME/Exercise_Phase2_design/merge_pyrosetta_csvs.py"
+SCRIPT="$WORKFLOW_DIR/scripts/PyRosetta_fullScoring_v4_debug.py"
+MERGE_SCRIPT="$WORKFLOW_DIR/scripts/merge_pyrosetta_csvs.py"
 
-INPUT_DIR="/scratch/2026-05-24/bme-yaozm/PGLYRP1_test"/mpnn_relax4_out/pilot0
-OUT_BASE="/scratch/2026-05-24/bme-yaozm/PGLYRP1_test"/pyrosetta_scores/pilot0
+INPUT_DIR="/scratch/2026-06-09/bme-yaozm/PGLYRP1_test"/mpnn_relax4_out/pilot0
+OUT_BASE="/scratch/2026-06-09/bme-yaozm/PGLYRP1_test"/pyrosetta_scores/pilot0
 
 TARGET_CHAIN="A"
 BINDER_CHAIN="B"
@@ -27,6 +30,31 @@ MERGED_DIR="$OUT_BASE/merged"
 
 mkdir -p "$RUNLIST_DIR" "$SHARD_INPUT_ROOT" "$SHARD_RESULT_ROOT" "$LOG_DIR" "$MERGED_DIR"
 ALL_TAGS="$RUNLIST_DIR/all_pdbs.txt"
+
+count_input_pdbs() {
+    find "$INPUT_DIR" -maxdepth 1 -type f -name "*.pdb" | wc -l
+}
+
+INPUT_COUNT_1=$(count_input_pdbs)
+echo "PyRosetta input pdb count before stability check: ${INPUT_COUNT_1}"
+if [[ "$INPUT_COUNT_1" -eq 0 ]]; then
+    echo "ERROR: no input pdb files found in $INPUT_DIR" >&2
+    exit 2
+fi
+
+if [[ "$WAIT_FOR_STABLE_INPUT" == "1" ]]; then
+    sleep "$INPUT_STABILITY_SECONDS"
+    INPUT_COUNT_2=$(count_input_pdbs)
+    echo "PyRosetta input pdb count after ${INPUT_STABILITY_SECONDS}s: ${INPUT_COUNT_2}"
+    if [[ "$INPUT_COUNT_1" -ne "$INPUT_COUNT_2" ]]; then
+        echo "ERROR: input pdb count changed from ${INPUT_COUNT_1} to ${INPUT_COUNT_2}; upstream output is still changing. Wait for upstream jobs to finish, then resubmit PyRosetta." >&2
+        exit 3
+    fi
+fi
+
+if [[ "$INPUT_COUNT_1" -lt "$N_SHARDS" ]]; then
+    echo "WARNING: input pdb count (${INPUT_COUNT_1}) is lower than requested shards (${N_SHARDS}); only ${INPUT_COUNT_1} non-empty shard jobs can be submitted." >&2
+fi
 
 python3 - <<'PY' "$INPUT_DIR" "$ALL_TAGS"
 import sys, os, glob
@@ -58,6 +86,7 @@ for i in range(n_shards):
         for name in subset:
             handle.write(name + "\n")
     print(f"{path}: {len(subset)} files")
+print(f"Created {len([name for name in os.listdir(runlist_dir) if name.startswith('runlist_') and name.endswith('.txt')])} non-empty runlists from {len(names)} pdbs; requested {n_shards} shards")
 PY
 
 for RUNLIST in "$RUNLIST_DIR"/runlist_*.txt; do
@@ -139,5 +168,8 @@ date
 EOF
 fi
 
+if [[ ${#JOB_IDS[@]} -ne "$N_SHARDS" ]]; then
+    echo "WARNING: submitted ${#JOB_IDS[@]} PyRosetta shard jobs, requested ${N_SHARDS}. Check input pdb count and runlists under $RUNLIST_DIR." >&2
+fi
 echo "Submitted ${#JOB_IDS[@]} PGLYRP1 PyRosetta shard jobs."
 echo "Merged csv: $MERGED_DIR/pyrosetta_scores_merged.csv"

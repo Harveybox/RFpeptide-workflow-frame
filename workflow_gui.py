@@ -3,6 +3,7 @@ import csv
 import heapq
 import json
 import math
+import shlex
 import subprocess
 import sys
 import threading
@@ -46,6 +47,7 @@ FIELD_GROUPS = [
         [
             ("target", "Target name", str),
             ("pilot", "Pilot name", str),
+            ("remarks", "Remarks / pilot notes", str),
             ("cluster_user", "Cluster user", str),
             ("scratch_date", "Scratch date", str),
             ("project_dir_name", "Scratch project dir", str),
@@ -204,6 +206,10 @@ class WorkflowGui:
         for traced_key in ("target", "pilot", "scratch_date", "project_dir_name"):
             if traced_key in self.variables:
                 self.variables[traced_key][0].trace_add("write", lambda *_: self._update_current_project_banner())
+        cluster_settings_frame = Frame(notebook)
+        notebook.add(cluster_settings_frame, text="Cluster Settings")
+        self.cluster_settings_frame = cluster_settings_frame
+        self._build_cluster_settings(cluster_settings_frame)
         cluster_frame = Frame(notebook)
         notebook.add(cluster_frame, text="Cluster Dashboard")
         self._build_cluster_dashboard(cluster_frame)
@@ -322,15 +328,58 @@ class WorkflowGui:
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-    def _build_cluster_dashboard(self, parent: Frame):
-        body = Frame(parent)
-        body.pack(fill="both", expand=True, padx=12, pady=12)
+    def _build_cluster_settings(self, parent: Frame):
+        outer = Frame(parent)
+        outer.pack(fill="both", expand=True)
+        scroll_canvas = Canvas(outer, highlightthickness=0)
+        scroll_y = ttk.Scrollbar(outer, orient="vertical", command=scroll_canvas.yview)
+        scroll_canvas.configure(yscrollcommand=scroll_y.set)
+        scroll_y.pack(side="right", fill="y")
+        scroll_canvas.pack(side="left", fill="both", expand=True)
+        body = Frame(scroll_canvas)
+        body_window = scroll_canvas.create_window((0, 0), window=body, anchor="nw")
+
+        def update_scroll_region(_event=None):
+            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+
+        def fit_body_width(event):
+            scroll_canvas.itemconfigure(body_window, width=event.width)
+
+        def enable_mousewheel(_event=None):
+            scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+        def disable_mousewheel(_event=None):
+            scroll_canvas.unbind_all("<MouseWheel>")
+
+        def on_mousewheel(event):
+            scroll_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        body.bind("<Configure>", update_scroll_region)
+        scroll_canvas.bind("<Configure>", fit_body_width)
+        body.bind("<Enter>", enable_mousewheel)
+        body.bind("<Leave>", disable_mousewheel)
+        body.configure(padx=12, pady=12)
 
         self.cluster_profile_path_var = StringVar(value=str(self.cluster_profile_path))
-        self.stage_var = StringVar(value="RFDiffusion")
-        self.auto_refresh_var = BooleanVar(value=False)
+        self.cluster_settings_status_var = StringVar(value="Cluster settings loaded.")
+        self.cluster_host_var = StringVar()
+        self.cluster_user_var = StringVar()
+        self.cluster_port_var = StringVar()
+        self.auth_method_var = StringVar()
+        self.password_var = StringVar()
+        self.remember_password_var = BooleanVar()
+        self.cluster_ssh_key_var = StringVar()
+        self.cluster_remote_upload_parent_var = StringVar()
+        self.cluster_remote_workflow_dir_var = StringVar()
+        self.cluster_local_download_dir_var = StringVar()
+        self.cluster_pymol_var = StringVar()
+        self.cluster_bjobs_user_var = StringVar()
+        self.cluster_scan_depth_var = StringVar()
+        self.cluster_log_depth_var = StringVar()
+        self.cluster_result_patterns_var = StringVar()
+        self.cluster_ssh_extra_args_var = StringVar()
 
-        profile_frame = LabelFrame(body, text="Cluster profile")
+        profile_frame = LabelFrame(body, text="Cluster profile file")
         profile_frame.pack(fill="x", pady=(0, 8))
         Label(profile_frame, text="Profile").grid(row=0, column=0, sticky="w", padx=6, pady=6)
         Entry(profile_frame, textvariable=self.cluster_profile_path_var).grid(row=0, column=1, sticky="ew", padx=6, pady=6)
@@ -339,11 +388,23 @@ class WorkflowGui:
         Button(profile_frame, text="Save as", command=self.save_cluster_profile_as).grid(row=0, column=4, padx=3, pady=6)
         profile_frame.columnconfigure(1, weight=1)
 
+        connection_frame = LabelFrame(body, text="Connection")
+        connection_frame.pack(fill="x", pady=(0, 8))
+        for label, variable, row, column in [
+            ("Host", self.cluster_host_var, 0, 0),
+            ("User", self.cluster_user_var, 0, 2),
+            ("Port", self.cluster_port_var, 0, 4),
+        ]:
+            Label(connection_frame, text=label).grid(row=row, column=column, sticky="w", padx=6, pady=6)
+            Entry(connection_frame, textvariable=variable).grid(row=row, column=column + 1, sticky="ew", padx=6, pady=6)
+        Label(connection_frame, text="SSH key").grid(row=1, column=0, sticky="w", padx=6, pady=6)
+        Entry(connection_frame, textvariable=self.cluster_ssh_key_var).grid(row=1, column=1, columnspan=3, sticky="ew", padx=6, pady=6)
+        Button(connection_frame, text="Choose key", command=self.choose_cluster_ssh_key).grid(row=1, column=4, padx=3, pady=6)
+        connection_frame.columnconfigure(1, weight=1)
+        connection_frame.columnconfigure(3, weight=1)
+
         auth_frame = LabelFrame(body, text="Authentication")
         auth_frame.pack(fill="x", pady=(0, 8))
-        self.auth_method_var = StringVar(value=str(self.cluster_profile.get("auth_method") or "ssh_key"))
-        self.password_var = StringVar()
-        self.remember_password_var = BooleanVar(value=bool(self.cluster_profile.get("remember_password")))
         Label(auth_frame, text="Method").grid(row=0, column=0, sticky="w", padx=6, pady=6)
         ttk.Combobox(auth_frame, textvariable=self.auth_method_var, values=["ssh_key", "password"], state="readonly", width=14).grid(row=0, column=1, sticky="w", padx=6, pady=6)
         Label(auth_frame, text="Password").grid(row=0, column=2, sticky="w", padx=6, pady=6)
@@ -352,6 +413,63 @@ class WorkflowGui:
         Button(auth_frame, text="Load saved", command=self.load_saved_password).grid(row=0, column=5, padx=3, pady=6)
         Button(auth_frame, text="Forget saved", command=self.forget_saved_password).grid(row=0, column=6, padx=3, pady=6)
         auth_frame.columnconfigure(3, weight=1)
+
+        paths_frame = LabelFrame(body, text="Workflow paths and local tools")
+        paths_frame.pack(fill="x", pady=(0, 8))
+        for row, (label, variable) in enumerate([
+            ("Remote upload parent", self.cluster_remote_upload_parent_var),
+            ("Remote workflow dir fallback", self.cluster_remote_workflow_dir_var),
+            ("Local download dir fallback", self.cluster_local_download_dir_var),
+            ("PyMOL executable", self.cluster_pymol_var),
+            ("bjobs user", self.cluster_bjobs_user_var),
+        ]):
+            Label(paths_frame, text=label).grid(row=row, column=0, sticky="w", padx=6, pady=5)
+            Entry(paths_frame, textvariable=variable).grid(row=row, column=1, sticky="ew", padx=6, pady=5)
+            if label == "PyMOL executable":
+                Button(paths_frame, text="Choose", command=self.choose_pymol_executable).grid(row=row, column=2, padx=3, pady=5)
+        paths_frame.columnconfigure(1, weight=1)
+
+        scan_frame = LabelFrame(body, text="Scan and SSH options")
+        scan_frame.pack(fill="x", pady=(0, 8))
+        Label(scan_frame, text="Result scan max depth").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        Entry(scan_frame, textvariable=self.cluster_scan_depth_var, width=8).grid(row=0, column=1, sticky="w", padx=6, pady=6)
+        Label(scan_frame, text="Job log scan max depth").grid(row=0, column=2, sticky="w", padx=6, pady=6)
+        Entry(scan_frame, textvariable=self.cluster_log_depth_var, width=8).grid(row=0, column=3, sticky="w", padx=6, pady=6)
+        Label(scan_frame, text="Result file patterns").grid(row=1, column=0, sticky="w", padx=6, pady=6)
+        Entry(scan_frame, textvariable=self.cluster_result_patterns_var).grid(row=1, column=1, columnspan=3, sticky="ew", padx=6, pady=6)
+        Label(scan_frame, text="SSH extra args").grid(row=2, column=0, sticky="w", padx=6, pady=6)
+        Entry(scan_frame, textvariable=self.cluster_ssh_extra_args_var).grid(row=2, column=1, columnspan=3, sticky="ew", padx=6, pady=6)
+        scan_frame.columnconfigure(1, weight=1)
+        scan_frame.columnconfigure(3, weight=1)
+
+        hint = LabelFrame(body, text="Notes")
+        hint.pack(fill="both", expand=True, pady=(0, 8))
+        text = Text(hint, height=7, wrap="word")
+        text.pack(fill="both", expand=True, padx=6, pady=6)
+        text.insert(
+            END,
+            "Passwords are never written to cluster_profile.local.json. If Remember securely is enabled, the password is stored separately in the local encrypted credential store.\n"
+            "Remote upload parent is the recommended setting. The concrete remote_workflow_dir is derived from the active target config before upload/submit.\n"
+            "Result file patterns accept comma or whitespace separated patterns, for example: *.csv, *.pdb, *.out, *.err, *.json, *.txt.\n",
+        )
+        text.configure(state="disabled")
+
+        self._build_status_bar(body, self.cluster_settings_status_var, "Settings").pack(fill="x", pady=(0, 8))
+        self._load_cluster_settings_vars()
+
+    def _build_cluster_dashboard(self, parent: Frame):
+        body = Frame(parent)
+        body.pack(fill="both", expand=True, padx=12, pady=12)
+
+        self.stage_var = StringVar(value="RFDiffusion")
+        self.auto_refresh_var = BooleanVar(value=False)
+
+        settings_link = LabelFrame(body, text="Cluster settings")
+        settings_link.pack(fill="x", pady=(0, 8))
+        Label(settings_link, text="Active profile").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        Label(settings_link, textvariable=self.cluster_profile_path_var, anchor="w").grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        Button(settings_link, text="Open settings", command=self.show_cluster_settings).grid(row=0, column=2, padx=3, pady=6)
+        settings_link.columnconfigure(1, weight=1)
 
         summary_frame = LabelFrame(body, text="Current target parameters")
         summary_frame.pack(fill="x", pady=(0, 8))
@@ -402,6 +520,8 @@ class WorkflowGui:
         self.result_scan_date_var = StringVar()
         self.result_scan_user_var = StringVar()
         self.result_scan_status_var = StringVar(value="Not scanned")
+        self.result_status_display_var = StringVar(value="Not scanned | Selected: 0 files; Visible: 0; Scanned: 0")
+        self.result_scan_status_var.trace_add("write", lambda *_: self._update_result_status_display())
         self.result_filter_boxes = {}
         Label(controls, text="Search").grid(row=0, column=0, sticky="w", padx=6, pady=6)
         Entry(controls, textvariable=self.result_search_var).grid(row=0, column=1, columnspan=2, sticky="ew", padx=6, pady=6)
@@ -436,7 +556,7 @@ class WorkflowGui:
             Entry(controls, textvariable=variable, width=width).grid(row=2, column=start_column + 1, sticky="ew", padx=6, pady=(0, 6))
             start_column += 2
         Button(controls, text="Use current target", command=self.use_current_target_result_scan_settings).grid(row=2, column=6, padx=3, pady=(0, 6))
-        self._build_status_bar(controls, self.result_scan_status_var, "Results").grid(row=4, column=0, columnspan=8, sticky="ew", padx=6, pady=(0, 6))
+        self._build_status_bar(controls, self.result_status_display_var, "Results").grid(row=4, column=0, columnspan=8, sticky="ew", padx=6, pady=(0, 6))
         Button(controls, text="Scan logs/errors", command=self.scan_job_logs).grid(row=3, column=0, columnspan=2, sticky="ew", padx=6, pady=(0, 6))
         Button(controls, text="Preview log text", command=self.preview_selected_log_text).grid(row=3, column=2, columnspan=2, sticky="ew", padx=6, pady=(0, 6))
         controls.columnconfigure(1, weight=1)
@@ -450,6 +570,7 @@ class WorkflowGui:
         results_y_scroll = ttk.Scrollbar(results_table_frame, orient="vertical", command=self.results_tree.yview)
         results_x_scroll = ttk.Scrollbar(results_table_frame, orient="horizontal", command=self.results_tree.xview)
         self.results_tree.configure(yscrollcommand=results_y_scroll.set, xscrollcommand=results_x_scroll.set)
+        self.results_tree.bind("<<TreeviewSelect>>", lambda _event: self._update_result_status_display())
         for column in columns:
             self.results_tree.heading(column, text=column, command=lambda col=column: self._sort_results(col))
             width = 90
@@ -659,6 +780,53 @@ class WorkflowGui:
             return cluster_ops.load_profile(cluster_ops.DEFAULT_PROFILE)
         self.cluster_profile_path = cluster_ops.DEFAULT_EXAMPLE_PROFILE
         return cluster_ops.default_profile()
+
+    def show_cluster_settings(self):
+        if hasattr(self, "cluster_settings_frame"):
+            self.notebook.select(self.cluster_settings_frame)
+
+    def _load_cluster_settings_vars(self):
+        if not hasattr(self, "cluster_host_var"):
+            return
+        profile = self.cluster_profile
+        self.cluster_profile_path_var.set(str(self.cluster_profile_path))
+        self.cluster_host_var.set(str(profile.get("host") or ""))
+        self.cluster_user_var.set(str(profile.get("user") or ""))
+        self.cluster_port_var.set(str(profile.get("port") or "22"))
+        self.auth_method_var.set(str(profile.get("auth_method") or "ssh_key"))
+        self.password_var.set("")
+        self.remember_password_var.set(bool(profile.get("remember_password")))
+        self.cluster_ssh_key_var.set(str(profile.get("ssh_key") or ""))
+        self.cluster_remote_upload_parent_var.set(str(profile.get("remote_upload_parent") or ""))
+        self.cluster_remote_workflow_dir_var.set(str(profile.get("remote_workflow_dir") or ""))
+        self.cluster_local_download_dir_var.set(str(profile.get("local_download_dir") or ""))
+        self.cluster_pymol_var.set(str(profile.get("pymol_executable") or ""))
+        self.cluster_bjobs_user_var.set(str(profile.get("bjobs_user") or "$USER"))
+        self.cluster_scan_depth_var.set(str(profile.get("scratch_scan_max_depth") or 8))
+        self.cluster_log_depth_var.set(str(profile.get("job_log_scan_max_depth") or profile.get("scratch_scan_max_depth") or 8))
+        self.cluster_result_patterns_var.set(", ".join(str(item) for item in profile.get("result_file_patterns", [])))
+        self.cluster_ssh_extra_args_var.set(" ".join(shlex.quote(str(item)) for item in profile.get("ssh_extra_args", [])))
+        if self.remember_password_var.get():
+            self.load_saved_password(silent=True)
+        self.cluster_settings_status_var.set(f"Loaded cluster profile: {self.cluster_profile_path}")
+
+    def choose_cluster_ssh_key(self):
+        path = filedialog.askopenfilename(
+            title="Choose SSH private key",
+            initialdir=str(Path.home() / ".ssh"),
+            filetypes=[("SSH key files", "id_* *.pem *.key"), ("All files", "*.*")],
+        )
+        if path:
+            self.cluster_ssh_key_var.set(path)
+
+    def choose_pymol_executable(self):
+        path = filedialog.askopenfilename(
+            title="Choose PyMOL executable",
+            initialdir=str(Path.home()),
+            filetypes=[("Executable files", "*.exe *.bat *.cmd"), ("All files", "*.*")],
+        )
+        if path:
+            self.cluster_pymol_var.set(path)
 
     def _load_scratch_migration_vars(self):
         if not hasattr(self, "scratch_root_var"):
@@ -991,20 +1159,74 @@ class WorkflowGui:
         except Exception as exc:
             self._show_error("Failed to generate workflow", exc)
 
+    def _apply_cluster_settings_to_profile(self, profile: dict) -> dict:
+        if not hasattr(self, "cluster_host_var"):
+            return profile
+        profile["host"] = self.cluster_host_var.get().strip()
+        profile["user"] = self.cluster_user_var.get().strip()
+        port_text = self.cluster_port_var.get().strip()
+        if port_text:
+            try:
+                profile["port"] = int(port_text)
+            except ValueError as exc:
+                raise ValueError("Cluster port must be an integer") from exc
+        else:
+            profile.pop("port", None)
+        profile["auth_method"] = self.auth_method_var.get().strip() or "ssh_key"
+        profile["remember_password"] = bool(self.remember_password_var.get())
+        for key, variable in [
+            ("ssh_key", self.cluster_ssh_key_var),
+            ("remote_upload_parent", self.cluster_remote_upload_parent_var),
+            ("remote_workflow_dir", self.cluster_remote_workflow_dir_var),
+            ("local_download_dir", self.cluster_local_download_dir_var),
+            ("pymol_executable", self.cluster_pymol_var),
+            ("bjobs_user", self.cluster_bjobs_user_var),
+        ]:
+            value = variable.get().strip()
+            if value:
+                profile[key] = value
+            else:
+                profile.pop(key, None)
+        for key, variable in [
+            ("scratch_scan_max_depth", self.cluster_scan_depth_var),
+            ("job_log_scan_max_depth", self.cluster_log_depth_var),
+        ]:
+            value = variable.get().strip()
+            if value:
+                try:
+                    profile[key] = int(value)
+                except ValueError as exc:
+                    raise ValueError(f"{key} must be an integer") from exc
+            else:
+                profile.pop(key, None)
+        patterns = self._split_profile_list(self.cluster_result_patterns_var.get())
+        if patterns:
+            profile["result_file_patterns"] = patterns
+        else:
+            profile.pop("result_file_patterns", None)
+        extra_args = shlex.split(self.cluster_ssh_extra_args_var.get().strip()) if self.cluster_ssh_extra_args_var.get().strip() else []
+        profile["ssh_extra_args"] = extra_args
+        password = self.password_var.get()
+        if profile["auth_method"] == "password" and password:
+            profile["password"] = password
+        else:
+            profile.pop("password", None)
+        return profile
+
+    def _split_profile_list(self, text: str) -> list[str]:
+        return [item.strip() for item in text.replace(",", " ").split() if item.strip()]
+
+    def _collect_credential_profile(self) -> dict:
+        profile = deepcopy(self.cluster_profile)
+        return self._apply_cluster_settings_to_profile(profile)
+
     def _collect_cluster_profile(self) -> dict:
         profile = deepcopy(self.cluster_profile)
+        profile = self._apply_cluster_settings_to_profile(profile)
         data = self._collect_config()
         profile["stage_scripts"] = self._stage_scripts_for_config(data)
         profile["remote_workflow_dir"] = self._remote_workflow_dir_for_config(profile, data)
         profile.setdefault("local_download_dir", f"downloads/{data.get('target', 'target')}")
-        if hasattr(self, "auth_method_var"):
-            profile["auth_method"] = self.auth_method_var.get().strip() or "ssh_key"
-            profile["remember_password"] = bool(self.remember_password_var.get())
-            password = self.password_var.get()
-            if profile["auth_method"] == "password" and password:
-                profile["password"] = password
-            else:
-                profile.pop("password", None)
         if hasattr(self, "scratch_root_var"):
             profile["scratch_migration"] = {
                 "scratch_root": self.scratch_root_var.get().strip() or "/scratch",
@@ -1055,9 +1277,12 @@ class WorkflowGui:
             self.cluster_profile_path_var.set(str(self.cluster_profile_path))
             if hasattr(self, "password_var"):
                 self.password_var.set("")
+            self._load_cluster_settings_vars()
             self._refresh_stage_selector()
             self._load_scratch_migration_vars()
             self._load_result_scan_vars()
+            if hasattr(self, "cluster_settings_status_var"):
+                self.cluster_settings_status_var.set(f"Loaded cluster profile: {self.cluster_profile_path}")
             self._log(f"Loaded cluster profile: {self.cluster_profile_path}")
         except Exception as exc:
             self._show_error("Failed to open cluster profile", exc)
@@ -1071,6 +1296,9 @@ class WorkflowGui:
             cluster_ops.save_profile(path, profile_to_save)
             self.cluster_profile_path = path
             self._save_remembered_password_if_requested()
+            self._load_cluster_settings_vars()
+            if hasattr(self, "cluster_settings_status_var"):
+                self.cluster_settings_status_var.set(f"Saved cluster profile: {path}")
             self._log(f"Saved cluster profile: {path}")
         except Exception as exc:
             self._show_error("Failed to save cluster profile", exc)
@@ -1123,6 +1351,7 @@ class WorkflowGui:
             data = self._collect_config()
             lines = [
                 f"Target: {data.get('target')}    Pilot: {data.get('pilot')}",
+                f"Remarks: {data.get('remarks') or '-'}",
                 f"Input PDB: {data.get('input_pdb')}",
                 f"Local input PDB: {data.get('local_input_pdb')}",
                 f"Chains: target={data.get('target_chain')} binder={data.get('binder_chain')}",
@@ -1987,7 +2216,7 @@ class WorkflowGui:
 
     def _save_remembered_password_if_requested(self):
         try:
-            profile = self._collect_cluster_profile()
+            profile = self._collect_credential_profile()
             if profile.get("auth_method") != "password" or not profile.get("remember_password"):
                 return
             password = self.password_var.get()
@@ -2000,7 +2229,7 @@ class WorkflowGui:
 
     def load_saved_password(self, silent: bool = False):
         try:
-            profile = self._collect_cluster_profile()
+            profile = self._collect_credential_profile()
             password = credential_store.load_password(profile)
             if password:
                 self.password_var.set(password)
@@ -2014,7 +2243,7 @@ class WorkflowGui:
 
     def forget_saved_password(self):
         try:
-            profile = self._collect_cluster_profile()
+            profile = self._collect_credential_profile()
             existed = credential_store.delete_password(profile)
             self.password_var.set("")
             if existed:
@@ -2065,6 +2294,16 @@ class WorkflowGui:
             if result.stderr.strip():
                 self._log(result.stderr.strip())
         self._log(f"Downloaded result files are under: {download_root or self._result_download_root()}")
+
+    def _update_result_status_display(self):
+        if not hasattr(self, "result_status_display_var"):
+            return
+        base_status = self.result_scan_status_var.get() if hasattr(self, "result_scan_status_var") else ""
+        selected_count = len(self.results_tree.selection()) if hasattr(self, "results_tree") else 0
+        visible_count = len(self.results_tree.get_children()) if hasattr(self, "results_tree") else 0
+        scanned_count = len(self.result_entries) if hasattr(self, "result_entries") else 0
+        count_text = f"Selected: {selected_count} file(s); Visible: {visible_count}; Scanned: {scanned_count}"
+        self.result_status_display_var.set(f"{base_status} | {count_text}" if base_status else count_text)
 
     def _download_result_entries(self, profile: dict, entries: list[dict]):
         results = []
@@ -2408,6 +2647,7 @@ class WorkflowGui:
                     entry.get("path", ""),
                 ),
             )
+        self._update_result_status_display()
 
     def _sort_results(self, column: str):
         if self.result_sort_column == column:

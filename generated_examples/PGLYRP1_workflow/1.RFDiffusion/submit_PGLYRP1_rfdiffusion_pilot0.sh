@@ -1,21 +1,27 @@
 #!/bin/bash
 set -euo pipefail
 
-QUEUE="8v100-32-sc"
+WORKFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+QUEUE="hgx-aais-didier"
+GPU_NCPU=8
+GPU_REQ="num=1:aff=no"
+GPU_SPAN="span[ptile=8]"
 MICROMAMBA="$HOME/bin/micromamba"
 ENV_NAME="SE3nv"
 RFDIFFUSION_DIR="$HOME/RFdiffusion"
 
-WORKDIR="/scratch/2026-05-24/bme-yaozm/PGLYRP1_test"
-INPUT_PDB="$HOME/Test3_PGLYRP1/1YCK_clean.pdb"
+WORKDIR="/scratch/2026-06-09/bme-yaozm/PGLYRP1_test"
+INPUT_PDB="$WORKFLOW_DIR/inputs/1YCK_clean.pdb"
 OUTPUT_PREFIX="$WORKDIR/example_outputs/pilot0/diffused_binder_cyclic_PGLYRP1_pilot0"
 
-N_SHARDS=10
+N_SHARDS=20
 DESIGNS_PER_SHARD=20
 
 mkdir -p "$WORKDIR"
 mkdir -p "$(dirname "$OUTPUT_PREFIX")"
 cd "$WORKDIR"
+
+echo "RFDiffusion GPU resource request: queue=${QUEUE}, ncpu=${GPU_NCPU}, span=${GPU_SPAN}, gpu=${GPU_REQ}"
 
 for i in $(seq 0 $((N_SHARDS-1))); do
     shard=$(printf "%02d" "$i")
@@ -27,7 +33,7 @@ for i in $(seq 0 $((N_SHARDS-1))); do
 #BSUB -q ${QUEUE}
 #BSUB -n 8
 #BSUB -R "span[ptile=8]"
-#BSUB -gpu "num=1/host"
+#BSUB -gpu "num=1:aff=no"
 #BSUB -o ${WORKDIR}/pglyrp1_pilot0_rfd_${shard}.%J.out
 #BSUB -e ${WORKDIR}/pglyrp1_pilot0_rfd_${shard}.%J.err
 
