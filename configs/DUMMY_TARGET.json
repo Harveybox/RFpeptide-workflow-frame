@@ -13,6 +13,7 @@
   "contigs": "A1-3/0 8-16",
   "binder_length": "8-16",
   "rfdiffusion": {
+    "hotspot_res": "A2",
     "queue": "your_gpu_queue",
     "gpu_req": "num=1:aff=no",
     "gpu_ncpu": 8,
@@ -28,6 +29,8 @@
     "env_name": "proteinmpnn_binder_design",
     "script": "$HOME/dl_binder_design/mpnn_fr/dl_interface_design.py",
     "n_shards": 2,
+    "ncpu": 1,
+    "resource_req": "",
     "relax_cycles": 4,
     "seqs_per_struct": 1
   },
@@ -60,7 +63,7 @@
     "local_merge_script": "examples/scripts/merge_pyrosetta_csvs.py",
     "n_shards": 2,
     "ncpu": 2,
-    "ptile": 2,
+    "resource_req": "",
     "pack_input": true,
     "pack_separated": true,
     "packstat": true

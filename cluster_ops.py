@@ -174,7 +174,7 @@ def run_remote(profile: dict, command: str, timeout: int = 60) -> CommandResult:
 
 
 def test_connection(profile: dict) -> CommandResult:
-    return run_remote(profile, "echo connected:$(hostname); command -v bjobs || true; command -v bsub || true; command -v bkill || true")
+    return run_remote(profile, "echo connected:$(hostname); command -v bjobs || true; command -v bsub || true; command -v bkill || true; command -v queueinfo || true")
 
 
 def ensure_remote_dir(profile: dict, remote_dir: str) -> CommandResult:
@@ -284,6 +284,22 @@ def describe_jobs(profile: dict, job_ids: list[str]) -> CommandResult:
     if not clean_ids:
         raise ValueError("No valid job ids selected")
     command = "bjobs -l " + " ".join(shlex.quote(job_id) for job_id in clean_ids) + " || true"
+    return run_remote(profile, command, timeout=60)
+
+
+def queue_info(profile: dict, mode: str = "all", queue_name: str = "") -> CommandResult:
+    mode = str(mode or "all").strip().lower()
+    if mode == "all":
+        command = "queueinfo"
+    elif mode == "gpu":
+        command = "queueinfo -gpu"
+    elif mode == "detail":
+        clean_queue = str(queue_name or "").strip()
+        if not clean_queue:
+            raise ValueError("Queue name is required for queueinfo -l")
+        command = "queueinfo -l " + shlex.quote(clean_queue)
+    else:
+        raise ValueError(f"Unsupported queueinfo mode: {mode}")
     return run_remote(profile, command, timeout=60)
 
 

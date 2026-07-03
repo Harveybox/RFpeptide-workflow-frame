@@ -52,16 +52,17 @@ FIELD_GROUPS = [
             ("scratch_date", "Scratch date", str),
             ("project_dir_name", "Scratch project dir", str),
             ("home_project_dir", "Cluster HOME project dir", str),
-            ("input_pdb", "Input PDB path", str),
-            ("target_chain", "Target chain", str),
-            ("binder_chain", "Binder chain", str),
-            ("contigs", "RFdiffusion contigs", str),
-            ("binder_length", "Binder length note", str),
         ],
     ),
     (
         "RFDiffusion",
         [
+            ("input_pdb", "Input PDB path", str),
+            ("target_chain", "Target chain", str),
+            ("binder_chain", "Binder chain", str),
+            ("contigs", "RFdiffusion contigs", str),
+            ("rfdiffusion.hotspot_res", "Hotspot residues (for example A326 or A67,A141)", str),
+            ("binder_length", "Binder length note", str),
             ("rfdiffusion.queue", "GPU queue", str),
             ("rfdiffusion.gpu_req", "LSF GPU request", str),
             ("rfdiffusion.gpu_ncpu", "GPU job CPU cores", int),
@@ -80,8 +81,10 @@ FIELD_GROUPS = [
             ("proteinmpnn.env_name", "Environment", str),
             ("proteinmpnn.script", "MPNN script", str),
             ("proteinmpnn.n_shards", "Shards", int),
-            ("proteinmpnn.relax_cycles", "Relax cycles", int),
+            ("proteinmpnn.ncpu", "LSF CPU cores (#BSUB -n)", int),
+            ("proteinmpnn.resource_req", "LSF resource request (#BSUB -R, optional)", str),
             ("proteinmpnn.seqs_per_struct", "Seqs per structure", int),
+            ("proteinmpnn.relax_cycles", "Relax cycles", int),
         ],
     ),
     (
@@ -96,8 +99,11 @@ FIELD_GROUPS = [
             ("afcyc.cpu_span", "RMSD span request", str),
             ("afcyc.env_name", "Environment", str),
             ("afcyc.afcyc_script", "AfCyc script", str),
+            ("afcyc.local_afcyc_script", "Local bundled AfCyc script", str),
             ("afcyc.rmsd_script", "RMSD script", str),
+            ("afcyc.local_rmsd_script", "Local bundled RMSD script", str),
             ("afcyc.merge_script", "Merge script", str),
+            ("afcyc.local_merge_script", "Local bundled merge script", str),
             ("afcyc.n_shards", "Shards", int),
             ("afcyc.num_recycles", "Recycles", int),
             ("afcyc.num_models", "Models", int),
@@ -110,15 +116,102 @@ FIELD_GROUPS = [
             ("pyrosetta.queue", "CPU queue", str),
             ("pyrosetta.env_name", "Environment", str),
             ("pyrosetta.script", "Scoring script", str),
+            ("pyrosetta.local_script", "Local bundled scoring script", str),
             ("pyrosetta.merge_script", "Merge script", str),
+            ("pyrosetta.local_merge_script", "Local bundled merge script", str),
             ("pyrosetta.n_shards", "Shards", int),
             ("pyrosetta.ncpu", "CPU cores", int),
-            ("pyrosetta.ptile", "PTILE", int),
+            ("pyrosetta.resource_req", "LSF resource request (#BSUB -R, optional)", str),
             ("pyrosetta.pack_input", "Pack input", bool),
             ("pyrosetta.pack_separated", "Pack separated", bool),
             ("pyrosetta.packstat", "Packstat", bool),
         ],
     ),
+]
+
+FIELD_DEFAULTS = {
+    "proteinmpnn.ncpu": 1,
+    "proteinmpnn.resource_req": "",
+    "proteinmpnn.relax_cycles": 4,
+    "pyrosetta.resource_req": "",
+}
+
+AFCYC_SCORE_PRESETS = [
+    ("i_pae_reported", "lower", "10"),
+    ("i_pae_norm_31", "lower", "10"),
+    ("i_pae", "lower", "10"),
+    ("binder_ca_rmsd_target_align", "lower", "10"),
+    ("plddt_binder", "higher", "90"),
+]
+
+PYROSETTA_SCORE_PRESETS = [
+    ("interface_dG", "lower", "10"),
+    ("separated_interface_energy", "lower", "10"),
+    ("cms", "higher", "90"),
+    ("interface_delta_sasa", "higher", "90"),
+    ("sap_bound", "lower", "10"),
+    ("sap_binder", "lower", "10"),
+    ("interface_delta_hbond_unsat", "lower", "10"),
+    ("interface_packstat", "higher", "90"),
+]
+
+HIT_SCREEN_DEFAULTS = {
+    "afcyc_ipae_column": "i_pae_reported",
+    "afcyc_ipae_max": "0.3",
+    "afcyc_rmsd_column": "binder_ca_rmsd_target_align",
+    "afcyc_rmsd_max": "1.5",
+    "afcyc_plddt_column": "plddt_binder",
+    "afcyc_plddt_min": "",
+    "pyro_dg_column": "interface_dG",
+    "pyro_dg_max": "-30",
+    "pyro_sap_column": "sap_bound",
+    "pyro_sap_max": "35",
+    "pyro_cms_column": "cms",
+    "pyro_cms_min": "300",
+    "pyro_sasa_column": "interface_delta_sasa",
+    "pyro_sasa_min": "",
+    "pyro_packstat_column": "interface_packstat",
+    "pyro_packstat_min": "",
+}
+
+
+HIT_FILTER_OUTPUT_COLUMNS = [
+    "i_pae",
+    "rmsd",
+    "plddt",
+    "interface_dG",
+    "sap_bound",
+    "cms",
+    "interface_delta_sasa",
+    "interface_packstat",
+]
+
+
+PYROSETTA_HIT_OUTPUT_COLUMNS = [
+    "interface_dG",
+    "separated_interface_energy",
+    "interface_delta_sasa",
+    "interface_packstat",
+    "interface_delta_hbond_unsat",
+    "num_interface_residues",
+    "gly_interface_energy",
+    "sap_bound",
+    "sap_free",
+    "sap_binder",
+    "cms",
+    "total_score_after_iam",
+    "swi_score",
+    "cyclization_seq_feasibility",
+    "gravy",
+    "aromaticity",
+    "isoelectric_point",
+    "instability_index",
+    "charge_pH7",
+    "frac_charged",
+    "frac_aromatic",
+    "n_term_bulky",
+    "c_term_bulky",
+    "junction_turn_count",
 ]
 
 
@@ -155,6 +248,12 @@ class WorkflowGui:
         self.result_sort_reverse = True
         self.debug_log_path = SCRIPT_DIR / "logs" / "workflow_gui_debug.log"
         self.status_var = StringVar(value="Idle")
+        self.log_lines = []
+        self.raw_output_blocks = []
+        self.log_text = None
+        self.raw_output_text = None
+        self.log_window = None
+        self.raw_output_window = None
 
         self._build()
         self._load_values(self.config_data)
@@ -266,18 +365,18 @@ class WorkflowGui:
         self.page_frames = {}
         self.nav_buttons = {}
 
-        self.pdb_preprocess_frame = self._create_page("PDB Preprocess", "PDB Preprocess", "Preview and clean input structures before workflow generation.", self._build_pdb_preprocess)
+        self.pdb_preprocess_frame = self._create_page("PDB Preprocess", "PDB Preprocess", "Fetch, inspect, select chains, and clean input structures.", self._build_pdb_preprocess, scrollable=True)
         for group_name, fields in FIELD_GROUPS:
-            self._create_page(group_name, group_name, "Edit target-specific workflow parameters.", lambda parent, name=group_name, group_fields=fields: self._build_group(parent, name, group_fields))
+            self._create_page(group_name, group_name, "Edit target-specific workflow parameters.", lambda parent, name=group_name, group_fields=fields: self._build_group(parent, name, group_fields), scrollable=True)
         for traced_key in ("target", "pilot", "scratch_date", "project_dir_name"):
             if traced_key in self.variables:
                 self.variables[traced_key][0].trace_add("write", lambda *_: self._update_current_project_banner())
         cluster_settings_frame = self._create_page("Cluster Settings", "Cluster Settings", "Connection, authentication, scan, and local tool settings.", self._build_cluster_settings)
         self.cluster_settings_frame = cluster_settings_frame
-        self._create_page("Cluster Dashboard", "Cluster Dashboard", "Submit, monitor, inspect, and stop cluster jobs.", self._build_cluster_dashboard)
-        self._create_page("Results Browser", "Results Browser", "Scan scratch, filter outputs, download results, and preview files.", self._build_results_browser)
-        self._create_page("Data Processing", "Data Processing", "Preview merged CSV files, plot metrics, and shortlist candidates.", self._build_data_processing)
-        self._create_page("Scratch Safety", "Scratch Safety", "Move scratch date folders safely to avoid cluster cleanup.", self._build_scratch_safety)
+        self._create_page("Cluster Dashboard", "Cluster Dashboard", "Submit, monitor, inspect, and stop cluster jobs.", self._build_cluster_dashboard, scrollable=True)
+        self._create_page("Results Browser", "Results Browser", "Scan scratch, filter outputs, download results, and preview files.", self._build_results_browser, scrollable=True)
+        self._create_page("Data Processing", "Data Processing", "Preview merged CSV files, plot metrics, and shortlist candidates.", self._build_data_processing, scrollable=True)
+        self._create_page("Scratch Safety", "Scratch Safety", "Move scratch date folders safely to avoid cluster cleanup.", self._build_scratch_safety, scrollable=True)
 
         self._build_navigation([
             ("Run", ["Cluster Dashboard", "Results Browser", "Data Processing"]),
@@ -286,21 +385,9 @@ class WorkflowGui:
         ])
         self._show_page("Cluster Dashboard")
 
-        log_frame = LabelFrame(self.root, text="Log", bg=self.colors["card_bg"], fg=self.colors["text"])
-        log_frame.pack(fill="both", expand=False, padx=12, pady=(0, 8))
-        self.log_text = Text(log_frame, height=6, wrap="word")
-        self.log_text.pack(fill="both", expand=True, padx=6, pady=6)
+        self._build_output_bar()
 
-        raw_frame = LabelFrame(self.root, text="Raw SSH/LSF output", bg=self.colors["card_bg"], fg=self.colors["text"])
-        raw_frame.pack(fill="both", expand=False, padx=12, pady=(0, 12))
-        raw_toolbar = Frame(raw_frame, bg=self.colors["card_bg"])
-        raw_toolbar.pack(fill="x", padx=6, pady=(6, 0))
-        Button(raw_toolbar, text="Clear raw output", command=self.clear_raw_output).pack(side="left", padx=(0, 4))
-        Button(raw_toolbar, text="Open debug log folder", command=self.open_debug_log_folder).pack(side="left", padx=4)
-        self.raw_output_text = Text(raw_frame, height=8, wrap="none")
-        self.raw_output_text.pack(fill="both", expand=True, padx=6, pady=6)
-
-    def _create_page(self, key: str, title: str, subtitle: str, builder):
+    def _create_page(self, key: str, title: str, subtitle: str, builder, scrollable: bool = False):
         page = Frame(self.page_container, bg=self.colors["app_bg"])
         page.grid(row=0, column=0, sticky="nsew")
         page.columnconfigure(0, weight=1)
@@ -312,8 +399,112 @@ class WorkflowGui:
         body = Frame(page, bg=self.colors["app_bg"])
         body.grid(row=1, column=0, sticky="nsew")
         self.page_frames[key] = page
-        builder(body)
+        builder(self._scrollable_page_body(body) if scrollable else body)
         return page
+
+    def _scrollable_page_body(self, parent: Frame) -> Frame:
+        outer = Frame(parent, bg=self.colors["app_bg"])
+        outer.pack(fill="both", expand=True)
+        canvas = Canvas(outer, highlightthickness=0, bg=self.colors["app_bg"])
+        y_scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=y_scrollbar.set)
+        y_scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        body = Frame(canvas, bg=self.colors["app_bg"])
+        body_window = canvas.create_window((0, 0), window=body, anchor="nw")
+
+        def update_scroll_region(_event=None):
+            viewport_width = max(canvas.winfo_width(), 1)
+            canvas.itemconfigure(body_window, width=viewport_width)
+            canvas.configure(scrollregion=(0, 0, viewport_width, body.winfo_reqheight()))
+
+        def fit_body_width(event):
+            canvas.itemconfigure(body_window, width=max(event.width, 1))
+            canvas.configure(scrollregion=(0, 0, max(event.width, 1), body.winfo_reqheight()))
+
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def enable_mousewheel(_event=None):
+            canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+        def disable_mousewheel(_event=None):
+            canvas.unbind_all("<MouseWheel>")
+
+        body.bind("<Configure>", update_scroll_region)
+        canvas.bind("<Configure>", fit_body_width)
+        body.bind("<Enter>", enable_mousewheel)
+        body.bind("<Leave>", disable_mousewheel)
+        return body
+
+    def _build_output_bar(self):
+        bar = Frame(self.root, bg=self.colors["card_bg"], bd=1, relief="solid")
+        bar.pack(fill="x", padx=12, pady=(0, 8))
+        Label(bar, text="Status", bg=self.colors["card_bg"], fg=self.colors["muted"]).pack(side="left", padx=(10, 6), pady=6)
+        Label(bar, textvariable=self.status_var, bg=self.colors["card_bg"], fg=self.colors["text"], anchor="w").pack(side="left", fill="x", expand=True, padx=(0, 8), pady=6)
+        Button(bar, text="Open Log", command=self.open_log_window).pack(side="right", padx=(4, 10), pady=4)
+        Button(bar, text="Raw SSH/LSF", command=self.open_raw_output_window).pack(side="right", padx=4, pady=4)
+        Button(bar, text="Clear raw", command=self.clear_raw_output).pack(side="right", padx=4, pady=4)
+        Button(bar, text="Debug folder", command=self.open_debug_log_folder).pack(side="right", padx=4, pady=4)
+
+    def _open_output_window(self, title: str, content: str, wrap: str, on_close):
+        window = Toplevel(self.root)
+        window.title(title)
+        window.geometry("1050x650")
+        frame = Frame(window)
+        frame.pack(fill="both", expand=True, padx=8, pady=8)
+        text = Text(frame, wrap=wrap)
+        y_scroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        x_scroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
+        text.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
+        text.grid(row=0, column=0, sticky="nsew")
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        if wrap == "none":
+            x_scroll.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        text.insert(END, content)
+        text.see(END)
+
+        def close_window():
+            on_close()
+            window.destroy()
+
+        window.protocol("WM_DELETE_WINDOW", close_window)
+        return window, text
+
+    def open_log_window(self):
+        if self.log_window is not None and self.log_window.winfo_exists():
+            self.log_window.lift()
+            return
+        content = "\n".join(self.log_lines)
+        if content:
+            content += "\n"
+        self.log_window, self.log_text = self._open_output_window(
+            "Workflow Log",
+            content,
+            "word",
+            lambda: self._clear_log_window_refs(),
+        )
+
+    def open_raw_output_window(self):
+        if self.raw_output_window is not None and self.raw_output_window.winfo_exists():
+            self.raw_output_window.lift()
+            return
+        self.raw_output_window, self.raw_output_text = self._open_output_window(
+            "Raw SSH/LSF output",
+            "".join(self.raw_output_blocks),
+            "none",
+            lambda: self._clear_raw_output_window_refs(),
+        )
+
+    def _clear_log_window_refs(self):
+        self.log_window = None
+        self.log_text = None
+
+    def _clear_raw_output_window_refs(self):
+        self.raw_output_window = None
+        self.raw_output_text = None
 
     def _build_navigation(self, sections: list[tuple[str, list[str]]]):
         Label(
@@ -387,22 +578,62 @@ class WorkflowGui:
         body = Frame(parent)
         body.pack(fill="both", expand=True, padx=12, pady=12)
 
+        self.pdb_rcsb_id_var = StringVar()
         self.pdb_raw_path_var = StringVar()
+        self.pdb_original_path_var = StringVar()
         self.pdb_clean_output_var = StringVar()
         self.pdb_keep_protein_only_var = BooleanVar(value=True)
         self.pdb_renumber_atoms_var = BooleanVar(value=True)
         self.pdb_renumber_residues_var = BooleanVar(value=False)
+        self.pdb_renumber_chains_var = BooleanVar(value=False)
         self.pdb_set_as_input_var = BooleanVar(value=True)
         self.pdb_preprocess_status_var = StringVar(value="Select a PDB and preview it.")
+        self.pdb_chain_ids = []
+        self.pdb_chain_info = {}
+
+        fetch_frame = LabelFrame(body, text="Experimental RCSB PDB fetch")
+        fetch_frame.pack(fill="x", pady=(0, 8))
+        Label(fetch_frame, text="PDB ID").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        Entry(fetch_frame, textvariable=self.pdb_rcsb_id_var, width=12).grid(row=0, column=1, sticky="w", padx=6, pady=6)
+        Button(fetch_frame, text="Fetch PDB", command=self.fetch_rcsb_pdb).grid(row=0, column=2, padx=3, pady=6)
+        Label(
+            fetch_frame,
+            text="Downloads the legacy PDB-format structure from RCSB into inputs_preprocessed/rcsb.",
+            fg=self.colors["muted"],
+        ).grid(row=0, column=3, sticky="w", padx=8, pady=6)
+        fetch_frame.columnconfigure(3, weight=1)
 
         input_frame = LabelFrame(body, text="Raw PDB")
         input_frame.pack(fill="x", pady=(0, 8))
         Label(input_frame, text="PDB file").grid(row=0, column=0, sticky="w", padx=6, pady=6)
         Entry(input_frame, textvariable=self.pdb_raw_path_var).grid(row=0, column=1, sticky="ew", padx=6, pady=6)
         Button(input_frame, text="Browse", command=self.choose_preprocess_pdb).grid(row=0, column=2, padx=3, pady=6)
-        Button(input_frame, text="Preview sequence", command=self.preview_preprocess_pdb).grid(row=0, column=3, padx=3, pady=6)
+        Button(input_frame, text="Preview structure", command=self.preview_preprocess_pdb).grid(row=0, column=3, padx=3, pady=6)
         Button(input_frame, text="Use as workflow input", command=self.use_preprocess_pdb_as_input).grid(row=0, column=4, padx=3, pady=6)
+        Button(input_frame, text="Restore original PDB", command=self.restore_original_pdb).grid(row=0, column=5, padx=3, pady=6)
+        Label(input_frame, text="Original snapshot").grid(row=1, column=0, sticky="w", padx=6, pady=(0, 6))
+        Entry(input_frame, textvariable=self.pdb_original_path_var, state="readonly").grid(row=1, column=1, columnspan=5, sticky="ew", padx=6, pady=(0, 6))
         input_frame.columnconfigure(1, weight=1)
+
+        chain_frame = LabelFrame(body, text="Chains to keep")
+        chain_frame.pack(fill="x", pady=(0, 8))
+        Label(
+            chain_frame,
+            text="Select one or more chains (Ctrl/Shift for multi-select). Cleanup keeps only selected chains.",
+            fg=self.colors["muted"],
+        ).pack(anchor="w", padx=6, pady=(6, 2))
+        chain_content = Frame(chain_frame)
+        chain_content.pack(fill="x", padx=6, pady=(0, 6))
+        self.pdb_chain_listbox = Listbox(chain_content, selectmode="extended", exportselection=False, height=6)
+        chain_scroll = ttk.Scrollbar(chain_content, orient="vertical", command=self.pdb_chain_listbox.yview)
+        self.pdb_chain_listbox.configure(yscrollcommand=chain_scroll.set)
+        self.pdb_chain_listbox.pack(side="left", fill="x", expand=True)
+        chain_scroll.pack(side="left", fill="y")
+        chain_actions = Frame(chain_content)
+        chain_actions.pack(side="left", fill="y", padx=(8, 0))
+        Button(chain_actions, text="Select all", command=self.select_all_pdb_chains).pack(fill="x", pady=(0, 4))
+        Button(chain_actions, text="Protein chains", command=self.select_protein_pdb_chains).pack(fill="x", pady=4)
+        Button(chain_actions, text="Clear", command=lambda: self.pdb_chain_listbox.selection_clear(0, END)).pack(fill="x", pady=4)
 
         options_frame = LabelFrame(body, text="Cleanup options")
         options_frame.pack(fill="x", pady=(0, 8))
@@ -412,17 +643,28 @@ class WorkflowGui:
         Checkbutton(options_frame, text="Remove non-protein components", variable=self.pdb_keep_protein_only_var).grid(row=1, column=0, sticky="w", padx=6, pady=(0, 6))
         Checkbutton(options_frame, text="Renumber atom serials", variable=self.pdb_renumber_atoms_var).grid(row=1, column=1, sticky="w", padx=6, pady=(0, 6))
         Checkbutton(options_frame, text="Renumber residues continuously by chain", variable=self.pdb_renumber_residues_var).grid(row=1, column=2, sticky="w", padx=6, pady=(0, 6))
+        Checkbutton(options_frame, text="Rename retained chains from A", variable=self.pdb_renumber_chains_var).grid(row=1, column=3, sticky="w", padx=6, pady=(0, 6))
         Checkbutton(options_frame, text="Set cleaned PDB as workflow input", variable=self.pdb_set_as_input_var).grid(row=2, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 6))
-        Button(options_frame, text="Clean PDB", command=self.clean_preprocess_pdb).grid(row=2, column=2, sticky="ew", padx=6, pady=(0, 6))
+        Button(options_frame, text="Apply cleanup / keep chains", command=self.clean_preprocess_pdb).grid(row=2, column=2, sticky="ew", padx=6, pady=(0, 6))
         self._build_status_bar(options_frame, self.pdb_preprocess_status_var, "PDB").grid(row=2, column=3, sticky="ew", padx=6, pady=(0, 6))
         options_frame.columnconfigure(1, weight=1)
         options_frame.columnconfigure(3, weight=1)
+
+        component_frame = LabelFrame(body, text="Structure components")
+        component_frame.pack(fill="both", expand=True, pady=(0, 8))
+        self.pdb_component_text = Text(component_frame, height=16, wrap="word")
+        component_y_scroll = ttk.Scrollbar(component_frame, orient="vertical", command=self.pdb_component_text.yview)
+        self.pdb_component_text.configure(yscrollcommand=component_y_scroll.set)
+        self.pdb_component_text.grid(row=0, column=0, sticky="nsew")
+        component_y_scroll.grid(row=0, column=1, sticky="ns")
+        component_frame.rowconfigure(0, weight=1)
+        component_frame.columnconfigure(0, weight=1)
 
         preview_frame = Frame(body)
         preview_frame.pack(fill="both", expand=True, pady=(0, 8))
 
         summary_frame = LabelFrame(preview_frame, text="Sequence summary")
-        summary_frame.pack(side="left", fill="both", expand=True, padx=(0, 4))
+        summary_frame.pack(fill="both", expand=True, pady=(0, 6))
         self.pdb_summary_text = Text(summary_frame, height=16, wrap="none")
         summary_y_scroll = ttk.Scrollbar(summary_frame, orient="vertical", command=self.pdb_summary_text.yview)
         summary_x_scroll = ttk.Scrollbar(summary_frame, orient="horizontal", command=self.pdb_summary_text.xview)
@@ -434,7 +676,7 @@ class WorkflowGui:
         summary_frame.columnconfigure(0, weight=1)
 
         table_frame = LabelFrame(preview_frame, text="Residues")
-        table_frame.pack(side="left", fill="both", expand=True, padx=(4, 0))
+        table_frame.pack(fill="both", expand=True)
         columns = ("chain", "resseq", "icode", "resname", "aa", "atoms")
         self.pdb_residue_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=16)
         residue_y_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.pdb_residue_tree.yview)
@@ -450,35 +692,7 @@ class WorkflowGui:
         table_frame.columnconfigure(0, weight=1)
 
     def _build_cluster_settings(self, parent: Frame):
-        outer = Frame(parent)
-        outer.pack(fill="both", expand=True)
-        scroll_canvas = Canvas(outer, highlightthickness=0)
-        scroll_y = ttk.Scrollbar(outer, orient="vertical", command=scroll_canvas.yview)
-        scroll_canvas.configure(yscrollcommand=scroll_y.set)
-        scroll_y.pack(side="right", fill="y")
-        scroll_canvas.pack(side="left", fill="both", expand=True)
-        body = Frame(scroll_canvas)
-        body_window = scroll_canvas.create_window((0, 0), window=body, anchor="nw")
-
-        def update_scroll_region(_event=None):
-            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
-
-        def fit_body_width(event):
-            scroll_canvas.itemconfigure(body_window, width=event.width)
-
-        def enable_mousewheel(_event=None):
-            scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)
-
-        def disable_mousewheel(_event=None):
-            scroll_canvas.unbind_all("<MouseWheel>")
-
-        def on_mousewheel(event):
-            scroll_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        body.bind("<Configure>", update_scroll_region)
-        scroll_canvas.bind("<Configure>", fit_body_width)
-        body.bind("<Enter>", enable_mousewheel)
-        body.bind("<Leave>", disable_mousewheel)
+        body = self._scrollable_page_body(parent)
         body.configure(padx=12, pady=12)
 
         self.cluster_profile_path_var = StringVar(value=str(self.cluster_profile_path))
@@ -592,6 +806,8 @@ class WorkflowGui:
         self.job_selection_var = StringVar(value="Selected: 0")
         self.job_sort_column = "jobid"
         self.job_sort_reverse = False
+        self.queue_name_var = StringVar()
+        self.queue_status_var = StringVar(value="Queue status not queried")
 
         settings_link = LabelFrame(body, text="Cluster settings")
         settings_link.pack(fill="x", pady=(0, 8))
@@ -611,10 +827,22 @@ class WorkflowGui:
         Button(actions, text="Upload workflow", command=self.upload_workflow).grid(row=0, column=1, padx=4, pady=6, sticky="ew")
         self.stage_box = ttk.Combobox(actions, textvariable=self.stage_var, values=list(self.cluster_profile.get("stage_scripts", {}).keys()), state="readonly", width=18)
         self.stage_box.grid(row=0, column=2, padx=4, pady=6, sticky="ew")
-        Button(actions, text="Submit stage", command=self.submit_selected_stage).grid(row=0, column=3, padx=4, pady=6, sticky="ew")
+        Button(actions, text="Sync + submit stage", command=self.submit_selected_stage).grid(row=0, column=3, padx=4, pady=6, sticky="ew")
         self._build_status_bar(actions, self.status_var, "Cluster").grid(row=1, column=0, columnspan=4, sticky="ew", padx=6, pady=(0, 6))
         for column in range(4):
             actions.columnconfigure(column, weight=1)
+
+        queue_frame = LabelFrame(body, text="Queue status")
+        queue_frame.pack(fill="x", pady=(0, 8))
+        Button(queue_frame, text="queueinfo", command=lambda: self.query_queue_info("all")).grid(row=0, column=0, padx=4, pady=6, sticky="ew")
+        Button(queue_frame, text="queueinfo -gpu", command=lambda: self.query_queue_info("gpu")).grid(row=0, column=1, padx=4, pady=6, sticky="ew")
+        Label(queue_frame, text="Queue name").grid(row=0, column=2, sticky="e", padx=(10, 4), pady=6)
+        Entry(queue_frame, textvariable=self.queue_name_var, width=24).grid(row=0, column=3, padx=4, pady=6, sticky="ew")
+        Button(queue_frame, text="queueinfo -l", command=lambda: self.query_queue_info("detail")).grid(row=0, column=4, padx=4, pady=6, sticky="ew")
+        self._build_status_bar(queue_frame, self.queue_status_var, "Queue").grid(row=1, column=0, columnspan=5, sticky="ew", padx=6, pady=(0, 6))
+        for column in (0, 1, 4):
+            queue_frame.columnconfigure(column, weight=1)
+        queue_frame.columnconfigure(3, weight=2)
 
         jobs_frame = LabelFrame(body, text="Jobs")
         jobs_frame.pack(fill="both", expand=True)
@@ -774,41 +1002,21 @@ class WorkflowGui:
         self._load_result_scan_vars()
 
     def _build_data_processing(self, parent: Frame):
-        outer = Frame(parent)
-        outer.pack(fill="both", expand=True)
-        scroll_canvas = Canvas(outer, highlightthickness=0)
-        scroll_y = ttk.Scrollbar(outer, orient="vertical", command=scroll_canvas.yview)
-        scroll_canvas.configure(yscrollcommand=scroll_y.set)
-        scroll_y.pack(side="right", fill="y")
-        scroll_canvas.pack(side="left", fill="both", expand=True)
-        body = Frame(scroll_canvas)
-        body_window = scroll_canvas.create_window((0, 0), window=body, anchor="nw")
-
-        def update_scroll_region(_event=None):
-            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
-
-        def fit_body_width(event):
-            scroll_canvas.itemconfigure(body_window, width=event.width)
-
-        def enable_mousewheel(_event=None):
-            scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)
-
-        def disable_mousewheel(_event=None):
-            scroll_canvas.unbind_all("<MouseWheel>")
-
-        def on_mousewheel(event):
-            scroll_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        body.bind("<Configure>", update_scroll_region)
-        scroll_canvas.bind("<Configure>", fit_body_width)
-        body.bind("<Enter>", enable_mousewheel)
-        body.bind("<Leave>", disable_mousewheel)
-        body.configure(padx=12, pady=12)
+        body = Frame(parent)
+        body.pack(fill="both", expand=True, padx=12, pady=12)
 
         self.data_csv_entries = []
+        self.data_csv_all_entries = []
+        self.data_csv_search_var = StringVar()
+        self.data_target_filter_var = StringVar(value="All")
+        self.data_pilot_filter_var = StringVar(value="All")
+        self.data_stage_filter_var = StringVar(value="All")
+        self.data_shard_filter_var = StringVar(value="All")
+        self.data_filter_boxes = {}
         self.data_loaded_csv_path = None
         self.data_loaded_headers = []
         self.data_metric_var = StringVar()
+        self.data_metric_direction_var = StringVar(value="higher")
         self.data_percentile_var = StringVar(value="90")
         self.data_threshold_var = StringVar()
         self.data_bins_var = StringVar(value="40")
@@ -816,6 +1024,27 @@ class WorkflowGui:
         self.data_hist_max_var = StringVar()
         self.data_robust_hist_var = BooleanVar(value=True)
         self.data_status_var = StringVar(value="No merged CSV loaded. Steps: scan -> load for analysis -> plot histogram + scatter.")
+        self.hit_afcyc_csv_var = StringVar()
+        self.hit_pyro_csv_var = StringVar()
+        self.hit_status_var = StringVar(value="No hit screening run")
+        self.hit_rows = []
+        self.hit_afcyc_ipae_col_var = StringVar(value=HIT_SCREEN_DEFAULTS["afcyc_ipae_column"])
+        self.hit_afcyc_ipae_max_var = StringVar(value=HIT_SCREEN_DEFAULTS["afcyc_ipae_max"])
+        self.hit_afcyc_rmsd_col_var = StringVar(value=HIT_SCREEN_DEFAULTS["afcyc_rmsd_column"])
+        self.hit_afcyc_rmsd_max_var = StringVar(value=HIT_SCREEN_DEFAULTS["afcyc_rmsd_max"])
+        self.hit_afcyc_plddt_col_var = StringVar(value=HIT_SCREEN_DEFAULTS["afcyc_plddt_column"])
+        self.hit_afcyc_plddt_min_var = StringVar(value=HIT_SCREEN_DEFAULTS["afcyc_plddt_min"])
+        self.hit_pyro_dg_col_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_dg_column"])
+        self.hit_pyro_dg_max_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_dg_max"])
+        self.hit_pyro_sap_col_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_sap_column"])
+        self.hit_pyro_sap_max_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_sap_max"])
+        self.hit_pyro_cms_col_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_cms_column"])
+        self.hit_pyro_cms_min_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_cms_min"])
+        self.hit_pyro_sasa_col_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_sasa_column"])
+        self.hit_pyro_sasa_min_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_sasa_min"])
+        self.hit_pyro_packstat_col_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_packstat_column"])
+        self.hit_pyro_packstat_min_var = StringVar(value=HIT_SCREEN_DEFAULTS["pyro_packstat_min"])
+        self.hit_limit_var = StringVar(value="200")
 
         scan_frame = LabelFrame(body, text="Merged CSV scan")
         scan_frame.pack(fill="x", pady=(0, 8))
@@ -825,7 +1054,23 @@ class WorkflowGui:
         Button(scan_frame, text="Scan merged CSV", command=self.scan_data_merged_csvs).grid(row=0, column=3, padx=3, pady=6)
         Button(scan_frame, text="Preview selected CSV", command=self.preview_data_csv).grid(row=0, column=4, padx=3, pady=6)
         Button(scan_frame, text="Load for analysis", command=self.load_data_csv_for_analysis).grid(row=0, column=5, padx=3, pady=6)
-        self._build_status_bar(scan_frame, self.data_status_var, "Data").grid(row=1, column=0, columnspan=6, sticky="ew", padx=6, pady=(0, 6))
+        Label(scan_frame, text="Search").grid(row=1, column=0, sticky="w", padx=6, pady=(0, 6))
+        Entry(scan_frame, textvariable=self.data_csv_search_var).grid(row=1, column=1, columnspan=2, sticky="ew", padx=6, pady=(0, 6))
+        self.data_csv_search_var.trace_add("write", lambda *_: self._apply_data_csv_filter())
+        data_filters = [
+            ("Target", "target", self.data_target_filter_var),
+            ("Pilot", "pilot", self.data_pilot_filter_var),
+            ("Stage", "stage", self.data_stage_filter_var),
+            ("Shard", "shard", self.data_shard_filter_var),
+        ]
+        for offset, (label, key, variable) in enumerate(data_filters):
+            column = offset * 2
+            Label(scan_frame, text=label).grid(row=2, column=column, sticky="w", padx=6, pady=(0, 6))
+            box = ttk.Combobox(scan_frame, textvariable=variable, values=["All"], state="readonly", width=16)
+            box.grid(row=2, column=column + 1, sticky="ew", padx=6, pady=(0, 6))
+            box.bind("<<ComboboxSelected>>", lambda _event: self._apply_data_csv_filter())
+            self.data_filter_boxes[key] = box
+        self._build_status_bar(scan_frame, self.data_status_var, "Data").grid(row=3, column=0, columnspan=8, sticky="ew", padx=6, pady=(0, 6))
         scan_frame.columnconfigure(1, weight=1)
 
         csv_frame = Frame(body)
@@ -856,17 +1101,21 @@ class WorkflowGui:
         Label(analysis_frame, text="Metric").grid(row=0, column=0, sticky="w", padx=6, pady=6)
         self.data_metric_box = ttk.Combobox(analysis_frame, textvariable=self.data_metric_var, values=[], state="readonly", width=32)
         self.data_metric_box.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
-        Label(analysis_frame, text="Percentile").grid(row=0, column=2, sticky="w", padx=6, pady=6)
-        Entry(analysis_frame, textvariable=self.data_percentile_var, width=8).grid(row=0, column=3, sticky="w", padx=6, pady=6)
-        Label(analysis_frame, text="Custom threshold").grid(row=0, column=4, sticky="w", padx=6, pady=6)
-        Entry(analysis_frame, textvariable=self.data_threshold_var, width=12).grid(row=0, column=5, sticky="w", padx=6, pady=6)
-        Label(analysis_frame, text="Bins").grid(row=0, column=6, sticky="w", padx=6, pady=6)
-        Entry(analysis_frame, textvariable=self.data_bins_var, width=8).grid(row=0, column=7, sticky="w", padx=6, pady=6)
-        Label(analysis_frame, text="Hist min").grid(row=1, column=0, sticky="w", padx=6, pady=(0, 6))
-        Entry(analysis_frame, textvariable=self.data_hist_min_var, width=12).grid(row=1, column=1, sticky="w", padx=6, pady=(0, 6))
-        Label(analysis_frame, text="Hist max").grid(row=1, column=2, sticky="w", padx=6, pady=(0, 6))
-        Entry(analysis_frame, textvariable=self.data_hist_max_var, width=12).grid(row=1, column=3, sticky="w", padx=6, pady=(0, 6))
-        Checkbutton(analysis_frame, text="Auto robust range 1-99% when min/max blank", variable=self.data_robust_hist_var).grid(row=1, column=4, columnspan=4, sticky="w", padx=6, pady=(0, 6))
+        Button(analysis_frame, text="AfCyc defaults", command=self.use_afcyc_metric_defaults).grid(row=0, column=2, sticky="ew", padx=3, pady=6)
+        Button(analysis_frame, text="PyRosetta defaults", command=self.use_pyrosetta_metric_defaults).grid(row=0, column=3, sticky="ew", padx=3, pady=6)
+        Label(analysis_frame, text="Direction").grid(row=0, column=4, sticky="w", padx=6, pady=6)
+        ttk.Combobox(analysis_frame, textvariable=self.data_metric_direction_var, values=["higher", "lower"], state="readonly", width=9).grid(row=0, column=5, sticky="w", padx=6, pady=6)
+        Label(analysis_frame, text="Percentile").grid(row=0, column=6, sticky="w", padx=6, pady=6)
+        Entry(analysis_frame, textvariable=self.data_percentile_var, width=8).grid(row=0, column=7, sticky="w", padx=6, pady=6)
+        Label(analysis_frame, text="Custom threshold").grid(row=1, column=0, sticky="w", padx=6, pady=(0, 6))
+        Entry(analysis_frame, textvariable=self.data_threshold_var, width=12).grid(row=1, column=1, sticky="w", padx=6, pady=(0, 6))
+        Label(analysis_frame, text="Bins").grid(row=1, column=2, sticky="w", padx=6, pady=(0, 6))
+        Entry(analysis_frame, textvariable=self.data_bins_var, width=8).grid(row=1, column=3, sticky="w", padx=6, pady=(0, 6))
+        Label(analysis_frame, text="Hist min").grid(row=1, column=4, sticky="w", padx=6, pady=(0, 6))
+        Entry(analysis_frame, textvariable=self.data_hist_min_var, width=12).grid(row=1, column=5, sticky="w", padx=6, pady=(0, 6))
+        Label(analysis_frame, text="Hist max").grid(row=1, column=6, sticky="w", padx=6, pady=(0, 6))
+        Entry(analysis_frame, textvariable=self.data_hist_max_var, width=12).grid(row=1, column=7, sticky="w", padx=6, pady=(0, 6))
+        Checkbutton(analysis_frame, text="Auto robust range 1-99% when min/max blank", variable=self.data_robust_hist_var).grid(row=2, column=0, columnspan=8, sticky="w", padx=6, pady=(0, 6))
         Button(
             analysis_frame,
             text="Plot histogram + scatter",
@@ -874,8 +1123,8 @@ class WorkflowGui:
             bg=self.colors["primary"],
             fg="#ffffff",
             activebackground=self.colors["primary_dark"],
-        ).grid(row=2, column=0, columnspan=2, sticky="ew", padx=6, pady=(0, 6))
-        self._build_status_bar(analysis_frame, self.data_status_var, "Data").grid(row=2, column=2, columnspan=6, sticky="ew", padx=6, pady=(0, 6))
+        ).grid(row=3, column=0, columnspan=2, sticky="ew", padx=6, pady=(0, 6))
+        self._build_status_bar(analysis_frame, self.data_status_var, "Data").grid(row=3, column=2, columnspan=6, sticky="ew", padx=6, pady=(0, 6))
         analysis_frame.columnconfigure(1, weight=1)
 
         plot_frame = LabelFrame(body, text="Metric plots")
@@ -896,12 +1145,12 @@ class WorkflowGui:
             fg=self.colors["muted"],
         ).pack(side="left")
         hist_frame = LabelFrame(plot_frame, text="Histogram")
-        hist_frame.pack(side="left", fill="both", expand=True, padx=(6, 3), pady=6)
+        hist_frame.pack(fill="both", expand=True, padx=6, pady=(6, 3))
         self.data_hist_canvas = Canvas(hist_frame, height=260, bg="white")
         self.data_hist_canvas.pack(fill="both", expand=True, padx=6, pady=6)
         self.data_hist_canvas.create_text(240, 130, text="Histogram will appear after plotting.", fill="#64748b")
         scatter_frame = LabelFrame(plot_frame, text="Scatter by CSV order")
-        scatter_frame.pack(side="left", fill="both", expand=True, padx=(3, 6), pady=6)
+        scatter_frame.pack(fill="both", expand=True, padx=6, pady=(3, 6))
         self.data_scatter_canvas = Canvas(scatter_frame, height=260, bg="white")
         self.data_scatter_canvas.pack(fill="both", expand=True, padx=6, pady=6)
         self.data_scatter_canvas.create_text(240, 130, text="Scatter plot will appear after plotting.", fill="#64748b")
@@ -926,6 +1175,104 @@ class WorkflowGui:
         candidate_x_scroll.grid(row=1, column=0, sticky="ew")
         candidates_frame.rowconfigure(0, weight=1)
         candidates_frame.columnconfigure(0, weight=1)
+
+        self._build_hit_screening(body)
+
+    def _build_hit_screening(self, parent: Frame):
+        hit_frame = LabelFrame(parent, text="Hit screening from AfCycDesign + PyRosetta merged CSV")
+        hit_frame.pack(fill="both", expand=True, pady=(0, 8))
+
+        source_frame = LabelFrame(hit_frame, text="CSV inputs")
+        source_frame.pack(fill="x", padx=6, pady=6)
+        Label(source_frame, text="AfCyc CSV").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        Entry(source_frame, textvariable=self.hit_afcyc_csv_var).grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        Button(source_frame, text="Use selected scanned CSV", command=lambda: self.set_hit_csv_from_selected("afcyc")).grid(row=0, column=2, padx=3, pady=6)
+        Button(source_frame, text="Browse", command=lambda: self.browse_hit_csv("afcyc")).grid(row=0, column=3, padx=3, pady=6)
+        Label(source_frame, text="PyRosetta CSV").grid(row=1, column=0, sticky="w", padx=6, pady=(0, 6))
+        Entry(source_frame, textvariable=self.hit_pyro_csv_var).grid(row=1, column=1, sticky="ew", padx=6, pady=(0, 6))
+        Button(source_frame, text="Use selected scanned CSV", command=lambda: self.set_hit_csv_from_selected("pyro")).grid(row=1, column=2, padx=3, pady=(0, 6))
+        Button(source_frame, text="Browse", command=lambda: self.browse_hit_csv("pyro")).grid(row=1, column=3, padx=3, pady=(0, 6))
+        source_frame.columnconfigure(1, weight=1)
+
+        threshold_frame = LabelFrame(hit_frame, text="RFpeptides-inspired thresholds")
+        threshold_frame.pack(fill="x", padx=6, pady=(0, 6))
+        hit_threshold_rows = [
+            ("AfCyc iPAE col", self.hit_afcyc_ipae_col_var, "<=", self.hit_afcyc_ipae_max_var),
+            ("AfCyc RMSD col", self.hit_afcyc_rmsd_col_var, "<=", self.hit_afcyc_rmsd_max_var),
+            ("binder pLDDT col", self.hit_afcyc_plddt_col_var, ">=", self.hit_afcyc_plddt_min_var),
+            ("interface dG col", self.hit_pyro_dg_col_var, "<=", self.hit_pyro_dg_max_var),
+            ("SAP col", self.hit_pyro_sap_col_var, "<=", self.hit_pyro_sap_max_var),
+            ("CMS col", self.hit_pyro_cms_col_var, ">=", self.hit_pyro_cms_min_var),
+            ("interface SASA col", self.hit_pyro_sasa_col_var, ">=", self.hit_pyro_sasa_min_var),
+            ("packstat col", self.hit_pyro_packstat_col_var, ">=", self.hit_pyro_packstat_min_var),
+        ]
+        for row, (label, column_var, operator, threshold_var) in enumerate(hit_threshold_rows):
+            Label(threshold_frame, text=label).grid(row=row, column=0, sticky="w", padx=6, pady=4)
+            Entry(threshold_frame, textvariable=column_var, width=26).grid(row=row, column=1, sticky="ew", padx=6, pady=4)
+            Label(threshold_frame, text=operator).grid(row=row, column=2, sticky="w")
+            Entry(threshold_frame, textvariable=threshold_var, width=10).grid(row=row, column=3, sticky="w", padx=6, pady=4)
+
+        limit_row = len(hit_threshold_rows)
+        Label(threshold_frame, text="Max hits").grid(row=limit_row, column=0, sticky="w", padx=6, pady=(2, 6))
+        Entry(threshold_frame, textvariable=self.hit_limit_var, width=10).grid(row=limit_row, column=1, sticky="w", padx=6, pady=(2, 6))
+        Button(threshold_frame, text="Reset paper defaults", command=self.reset_hit_thresholds).grid(row=limit_row, column=2, columnspan=2, sticky="ew", padx=6, pady=(2, 6))
+        Label(
+            threshold_frame,
+            text="Defaults follow RFpeptides-style filters: low iPAE/RMSD/ddG/SAP and high CMS; pLDDT is optional if blank.",
+            fg=self.colors["muted"],
+            wraplength=560,
+            justify="left",
+        ).grid(row=limit_row + 1, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 6))
+        threshold_frame.columnconfigure(1, weight=1)
+
+        actions = Frame(hit_frame)
+        actions.pack(fill="x", padx=6, pady=(0, 6))
+        hit_action_buttons = [
+            ("Run hit screening", self.run_hit_screening, True),
+            ("Save hit CSV", self.save_hit_screening_csv, False),
+            ("Download selected hit structures", lambda: self.download_hit_structures(selected_only=True), False),
+            ("Download all hit structures", lambda: self.download_hit_structures(selected_only=False), False),
+        ]
+        for index, (text, command, primary) in enumerate(hit_action_buttons):
+            options = {
+                "text": text,
+                "command": command,
+            }
+            if primary:
+                options.update({"bg": self.colors["primary"], "fg": "#ffffff", "activebackground": self.colors["primary_dark"]})
+            Button(actions, **options).grid(row=index // 2, column=index % 2, sticky="ew", padx=3, pady=3)
+        actions.columnconfigure(0, weight=1)
+        actions.columnconfigure(1, weight=1)
+        self._build_status_bar(hit_frame, self.hit_status_var, "Hits").pack(fill="x", padx=6, pady=(0, 6))
+
+        table_frame = Frame(hit_frame)
+        table_frame.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+        table_frame.rowconfigure(0, weight=1)
+        table_frame.columnconfigure(0, weight=1)
+        hit_columns = ("rank", "description", "i_pae", "rmsd", "plddt", "interface_dG", "sap", "cms", "binder_seq", "afcyc_pdb", "mpnn_pdb")
+        self.hit_tree = ttk.Treeview(table_frame, columns=hit_columns, show="headings", selectmode="extended", height=8)
+        hit_y_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.hit_tree.yview)
+        hit_x_scroll = ttk.Scrollbar(table_frame, orient="horizontal", command=self.hit_tree.xview)
+        self.hit_tree.configure(yscrollcommand=hit_y_scroll.set, xscrollcommand=hit_x_scroll.set)
+        widths = {
+            "rank": 60,
+            "description": 300,
+            "i_pae": 90,
+            "rmsd": 90,
+            "plddt": 90,
+            "interface_dG": 110,
+            "sap": 90,
+            "cms": 90,
+            "binder_seq": 160,
+            "afcyc_pdb": 520,
+            "mpnn_pdb": 520,
+        }
+        for column in hit_columns:
+            self.hit_tree.heading(column, text=column)
+            self.hit_tree.column(column, width=widths.get(column, 100), minwidth=60, anchor="w", stretch=False)
+        self.hit_tree.grid(row=0, column=0, sticky="nsew")
+        hit_y_scroll.grid(row=0, column=1, sticky="ns")
+        hit_x_scroll.grid(row=1, column=0, sticky="ew")
 
     def _build_scratch_safety(self, parent: Frame):
         body = Frame(parent)
@@ -1094,9 +1441,182 @@ class WorkflowGui:
             self.variables[key] = (var, value_type)
         body.columnconfigure(1, weight=1)
 
+        if group_name == "Project":
+            self.project_sync_status_var = StringVar(value="Project-derived fields have not been synchronized.")
+            sync_frame = LabelFrame(body, text="Project configuration helper")
+            sync_frame.grid(row=len(fields), column=0, columnspan=2, sticky="ew", pady=(14, 0))
+            Label(
+                sync_frame,
+                text=(
+                    "After entering target, pilot, cluster user/date and project directories, synchronize derived paths "
+                    "to RFDiffusion, AfCycDesign, PyRosetta, Results Browser, Scratch Safety and Dashboard."
+                ),
+                wraplength=920,
+                justify="left",
+                fg=self.colors["muted"],
+            ).grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(8, 4))
+            Button(
+                sync_frame,
+                text="Apply project info to all pages",
+                command=self.apply_project_info_to_all_pages,
+                bg=self.colors["primary"],
+                fg="#ffffff",
+                activebackground=self.colors["primary_dark"],
+            ).grid(row=1, column=0, sticky="ew", padx=8, pady=(4, 8))
+            self._build_status_bar(sync_frame, self.project_sync_status_var, "Project").grid(
+                row=1,
+                column=1,
+                sticky="ew",
+                padx=(0, 8),
+                pady=(4, 8),
+            )
+            sync_frame.columnconfigure(0, weight=1)
+            sync_frame.columnconfigure(1, weight=3)
+
+    def apply_project_info_to_all_pages(self):
+        try:
+            target = self._project_field("target")
+            if not target:
+                raise ValueError("Target name is required")
+            pilot = self._project_field("pilot") or "pilot0"
+            project_dir = self._project_field("project_dir_name") or f"{target}_test"
+            home_project_dir = self._project_field("home_project_dir") or f"$HOME/{target}"
+            cluster_user = self._project_field("cluster_user")
+            scratch_date = self._project_field("scratch_date")
+
+            self._set_config_variable("pilot", pilot)
+            self._set_config_variable("project_dir_name", project_dir)
+            self._set_config_variable("home_project_dir", home_project_dir)
+
+            changed = [
+                f"pilot={pilot}",
+                f"project_dir_name={project_dir}",
+                f"home_project_dir={home_project_dir}",
+            ]
+            self._replace_demo_bundle_sources(target, changed)
+
+            preview_profile = deepcopy(self.cluster_profile)
+            if hasattr(self, "cluster_remote_upload_parent_var"):
+                preview_profile["remote_upload_parent"] = self.cluster_remote_upload_parent_var.get().strip()
+            if hasattr(self, "cluster_remote_workflow_dir_var"):
+                preview_profile["remote_workflow_dir"] = self.cluster_remote_workflow_dir_var.get().strip()
+            base_data = self._collect_config()
+            remote_workflow_dir = self._remote_workflow_dir_for_config(preview_profile, base_data).rstrip("/")
+            if hasattr(self, "cluster_remote_workflow_dir_var"):
+                self.cluster_remote_workflow_dir_var.set(remote_workflow_dir)
+
+            local_pdb = self.top_local_pdb_var.get().strip() if hasattr(self, "top_local_pdb_var") else ""
+            current_input_pdb = self._project_field("input_pdb")
+            input_name = self._path_basename(local_pdb or current_input_pdb)
+            changed.append(f"remote_workflow_dir={remote_workflow_dir}")
+            if input_name:
+                remote_input_pdb = f"{remote_workflow_dir}/inputs/{input_name}"
+                self._set_config_variable("input_pdb", remote_input_pdb)
+                changed.append(f"input_pdb={remote_input_pdb}")
+
+            bundle_names = self._workflow_bundle_names(base_data)
+            derived_paths = {
+                "afcyc.afcyc_script": f"{remote_workflow_dir}/scripts/{bundle_names['afcyc_script']}",
+                "afcyc.rmsd_script": f"{remote_workflow_dir}/scripts/{bundle_names['afcyc_rmsd_script']}",
+                "afcyc.merge_script": f"{remote_workflow_dir}/scripts/{bundle_names['afcyc_merge_script']}",
+                "pyrosetta.script": f"{remote_workflow_dir}/scripts/{bundle_names['pyro_script']}",
+                "pyrosetta.merge_script": f"{remote_workflow_dir}/scripts/{bundle_names['pyro_merge_script']}",
+            }
+            for key, value in derived_paths.items():
+                self._set_config_variable(key, value)
+                changed.append(f"{key}={value}")
+
+            if hasattr(self, "result_scratch_root_var"):
+                self.result_scratch_root_var.set("/scratch")
+                self.result_scan_date_var.set(scratch_date)
+                self.result_scan_user_var.set(cluster_user)
+                root = self._remote_result_scan_root()
+                self.result_scan_status_var.set(f"Scan root: {root}" if root else "Set scan date/user")
+            if hasattr(self, "scratch_source_date_var"):
+                self.scratch_source_date_var.set(scratch_date)
+                self.scratch_user_dir_var.set(cluster_user)
+
+            self._refresh_stage_selector()
+            self._update_current_project_banner()
+            self._update_parameter_summary()
+            self.project_sync_status_var.set(
+                f"Synchronization complete for {target}/{pilot}: stage paths, PDB path, scan and scratch context updated. Save config when ready."
+            )
+            self._log("Applied project information to dependent pages:")
+            for item in changed:
+                self._log(f"  {item}")
+        except Exception as exc:
+            self._show_error("Failed to synchronize project configuration", exc)
+
+    def _project_field(self, key: str) -> str:
+        variable_entry = self.variables.get(key)
+        if not variable_entry:
+            return ""
+        return str(variable_entry[0].get() or "").strip()
+
+    def _set_config_variable(self, key: str, value):
+        variable_entry = self.variables.get(key)
+        if not variable_entry:
+            return
+        variable, value_type = variable_entry
+        if value_type is bool:
+            variable.set(bool(value))
+        else:
+            variable.set(str(value))
+
+    def _path_basename(self, path_text: str) -> str:
+        normalized = str(path_text or "").strip().replace("\\", "/").rstrip("/")
+        return normalized.rsplit("/", 1)[-1] if normalized else ""
+
+    def _workflow_bundle_names(self, data: dict) -> dict[str, str]:
+        afcyc = data.get("afcyc", {})
+        pyrosetta = data.get("pyrosetta", {})
+        return {
+            "afcyc_script": self._path_basename(afcyc.get("local_afcyc_script") or "afcyc_predict_batch.py"),
+            "afcyc_rmsd_script": self._path_basename(afcyc.get("local_rmsd_script") or "rmsd_from_afcyc.py"),
+            "afcyc_merge_script": self._path_basename(afcyc.get("local_merge_script") or "merge_afcyc_csvs.py"),
+            "pyro_script": self._path_basename(pyrosetta.get("local_script") or "PyRosetta_fullScoring_v4_debug.py"),
+            "pyro_merge_script": self._path_basename(pyrosetta.get("local_merge_script") or "merge_pyrosetta_csvs.py"),
+        }
+
+    def _replace_demo_bundle_sources(self, target: str, changed: list[str]):
+        if target.upper().startswith("DUMMY"):
+            return
+        candidates = {
+            "afcyc.local_afcyc_script": "../Test3_PGLYRP1/3.AfCycDesign/v3/afcyc_predict_batch.py",
+            "afcyc.local_rmsd_script": "../Test3_PGLYRP1/3.AfCycDesign/v3/rmsd_from_afcyc.py",
+            "afcyc.local_merge_script": "../Test3_PGLYRP1/3.AfCycDesign/v3/merge_afcyc_csvs.py",
+            "pyrosetta.local_script": "../Test3_PGLYRP1/4.PyRosetta/PyRosetta_fullScoring_v4_debug.py",
+            "pyrosetta.local_merge_script": "../Exercise_Phase2_design/4.PyRosetta/merge_pyrosetta_csvs.py",
+        }
+        for key, candidate in candidates.items():
+            current = self._project_field(key)
+            if current and not self._is_demo_bundle_path(current):
+                continue
+            candidate_path = generate_workflow.resolve_local_path(candidate)
+            if not candidate_path.is_file():
+                continue
+            self._set_config_variable(key, candidate)
+            changed.append(f"{key}={candidate}")
+
+    def _is_demo_bundle_path(self, path_text: str) -> bool:
+        normalized = str(path_text or "").replace("\\", "/").lower()
+        if "/examples/scripts/" in f"/{normalized.lstrip('/')}":
+            return True
+        try:
+            path = generate_workflow.resolve_local_path(path_text)
+            if path.is_file():
+                text = path.read_text(encoding="utf-8", errors="replace")[:2000].lower()
+                return "dummy " in text and "entrypoint" in text
+        except Exception:
+            pass
+        return False
+
     def _load_values(self, config: dict):
         for key, (var, value_type) in self.variables.items():
             value = get_nested(config, key)
+            if (value is None or (value == "" and value_type is int)) and key in FIELD_DEFAULTS:
+                value = FIELD_DEFAULTS[key]
             if value_type is bool:
                 var.set(bool(value))
             else:
@@ -1123,8 +1643,9 @@ class WorkflowGui:
             if value_type is bool:
                 value = bool(raw_value)
             elif value_type is int:
+                raw_text = str(raw_value).strip()
                 try:
-                    value = int(str(raw_value).strip())
+                    value = int(raw_text)
                 except ValueError as exc:
                     raise ValueError(f"{key} must be an integer") from exc
                 if value < 0:
@@ -1151,6 +1672,7 @@ class WorkflowGui:
             self._load_values(self.config_data)
             self._update_parameter_summary()
             self._load_result_scan_vars()
+            self._refresh_stage_selector()
             self._log(f"Loaded config: {self.config_path}")
         except Exception as exc:
             self._show_error("Failed to open config", exc)
@@ -1198,9 +1720,9 @@ class WorkflowGui:
         )
         if not path:
             return
-        self._set_workflow_local_pdb(Path(path))
-        self.pdb_raw_path_var.set(str(path))
-        self.pdb_clean_output_var.set(str(self._default_clean_pdb_output_path(Path(path))))
+        source_path = Path(path)
+        self._set_workflow_local_pdb(source_path)
+        self._set_preprocess_source(source_path, register_original=True)
         self._log(f"Selected local PDB: {path}")
 
     def preview_top_local_pdb(self):
@@ -1222,9 +1744,60 @@ class WorkflowGui:
         )
         if not path:
             return
-        self.pdb_raw_path_var.set(path)
-        self.pdb_clean_output_var.set(str(self._default_clean_pdb_output_path(Path(path))))
+        self._set_preprocess_source(Path(path), register_original=True)
         self.preview_preprocess_pdb()
+
+    def fetch_rcsb_pdb(self):
+        pdb_id = self.pdb_rcsb_id_var.get().strip()
+        try:
+            normalized_id = pdb_preprocess.normalize_pdb_id(pdb_id)
+        except Exception as exc:
+            self._show_error("Invalid PDB ID", exc)
+            return
+        destination = SCRIPT_DIR / "inputs_preprocessed" / "rcsb"
+        self.pdb_preprocess_status_var.set(f"Downloading {normalized_id} from RCSB PDB ...")
+
+        def on_success(result):
+            path = Path(result["path"])
+            self._set_preprocess_source(path, register_original=True)
+            self.pdb_preprocess_status_var.set(f"Downloaded {normalized_id}: {path}")
+            self._log(f"Fetched RCSB PDB {normalized_id} from {result['url']} -> {path}")
+            self.preview_preprocess_pdb()
+
+        self._run_background(
+            f"Fetch RCSB PDB {normalized_id}",
+            lambda: pdb_preprocess.fetch_rcsb_pdb(normalized_id, destination),
+            on_success,
+            lambda exc: self.pdb_preprocess_status_var.set(f"RCSB fetch failed: {exc}"),
+        )
+
+    def _set_preprocess_source(self, path: Path, register_original: bool):
+        source_path = Path(path).resolve()
+        if register_original:
+            original_path = pdb_preprocess.snapshot_original_pdb(
+                source_path,
+                SCRIPT_DIR / "inputs_preprocessed" / "originals",
+            )
+            self.pdb_original_path_var.set(str(original_path))
+        self.pdb_raw_path_var.set(str(source_path))
+        self.pdb_clean_output_var.set(str(self._default_clean_pdb_output_path(source_path)))
+
+    def restore_original_pdb(self):
+        try:
+            original_text = self.pdb_original_path_var.get().strip()
+            if not original_text:
+                raise ValueError("No original PDB snapshot is available")
+            original_path = self._resolve_local_config_path(original_text)
+            if not original_path.is_file():
+                raise FileNotFoundError(f"Original PDB snapshot not found: {original_path}")
+            self.pdb_raw_path_var.set(str(original_path))
+            self.pdb_clean_output_var.set(str(self._default_clean_pdb_output_path(original_path)))
+            self._set_workflow_local_pdb(original_path)
+            self.preview_preprocess_pdb()
+            self.pdb_preprocess_status_var.set(f"Restored original PDB: {original_path.name}")
+            self._log(f"Restored original PDB snapshot: {original_path}")
+        except Exception as exc:
+            self._show_error("Failed to restore original PDB", exc)
 
     def choose_clean_pdb_output(self):
         current = self.pdb_clean_output_var.get().strip()
@@ -1242,6 +1815,12 @@ class WorkflowGui:
     def preview_preprocess_pdb(self):
         try:
             path = self._preprocess_input_path()
+            if not self.pdb_original_path_var.get().strip():
+                original_path = pdb_preprocess.snapshot_original_pdb(
+                    path,
+                    SCRIPT_DIR / "inputs_preprocessed" / "originals",
+                )
+                self.pdb_original_path_var.set(str(original_path))
             if not self.pdb_clean_output_var.get().strip():
                 self.pdb_clean_output_var.set(str(self._default_clean_pdb_output_path(path)))
             summary = pdb_preprocess.parse_pdb(path)
@@ -1268,6 +1847,11 @@ class WorkflowGui:
             input_path = self._preprocess_input_path()
             output_text = self.pdb_clean_output_var.get().strip()
             output_path = self._resolve_local_config_path(output_text) if output_text else self._default_clean_pdb_output_path(input_path)
+            if input_path == output_path:
+                raise ValueError("Cleaned output must be different from the current input PDB")
+            selected_chains = self._selected_preprocess_chains()
+            if self.pdb_chain_ids and not selected_chains:
+                raise ValueError("Select at least one chain to keep")
             if self.pdb_renumber_residues_var.get():
                 if not messagebox.askyesno(
                     "Confirm residue renumbering",
@@ -1280,14 +1864,18 @@ class WorkflowGui:
                 keep_protein_only=bool(self.pdb_keep_protein_only_var.get()),
                 renumber_atoms=bool(self.pdb_renumber_atoms_var.get()),
                 renumber_residues=bool(self.pdb_renumber_residues_var.get()),
+                keep_chains=selected_chains if self.pdb_chain_ids else None,
+                renumber_chains=bool(self.pdb_renumber_chains_var.get()),
             )
             self.pdb_clean_output_var.set(str(output_path))
+            self.pdb_raw_path_var.set(str(output_path))
             summary = pdb_preprocess.parse_pdb(output_path)
             self._populate_pdb_preview(summary)
             if self.pdb_set_as_input_var.get():
                 self._set_workflow_local_pdb(output_path)
             self.pdb_preprocess_status_var.set(
-                f"Cleaned PDB: kept {result['kept_atoms']} atoms, removed {result['removed_atoms']} atoms -> {output_path.name}"
+                f"Cleaned PDB: kept {result['kept_atoms']} atoms in {', '.join(result['kept_chains']) or 'all chains'}, "
+                f"chain map {self._format_chain_map(result['chain_map'])}, removed {result['removed_atoms']} atoms -> {output_path.name}"
             )
             self._log(f"Cleaned PDB written: {output_path}")
         except Exception as exc:
@@ -1326,6 +1914,27 @@ class WorkflowGui:
     def _populate_pdb_preview(self, summary: dict):
         self.pdb_summary_text.delete("1.0", END)
         self.pdb_summary_text.insert(END, pdb_preprocess.summary_text(summary))
+        self.pdb_component_text.delete("1.0", END)
+        self.pdb_component_text.insert(END, pdb_preprocess.component_summary_text(summary))
+        previous_selected = {
+            self.pdb_chain_ids[index]
+            for index in self.pdb_chain_listbox.curselection()
+            if index < len(self.pdb_chain_ids)
+        }
+        self.pdb_chain_listbox.delete(0, END)
+        self.pdb_chain_info = summary.get("chains", {})
+        self.pdb_chain_ids = sorted(self.pdb_chain_info)
+        for index, chain in enumerate(self.pdb_chain_ids):
+            info = self.pdb_chain_info[chain]
+            references = ", ".join(info.get("dbrefs", [])) or "no database reference"
+            label = (
+                f"Chain {chain} | {info.get('description') or 'Unspecified molecule'} | "
+                f"protein={info.get('protein_residues', 0)}, other={info.get('nonprotein_residues', 0)}, atoms={info.get('atoms', 0)} | "
+                f"{references}"
+            )
+            self.pdb_chain_listbox.insert(END, label)
+            if not previous_selected or chain in previous_selected:
+                self.pdb_chain_listbox.selection_set(index)
         for item in self.pdb_residue_tree.get_children():
             self.pdb_residue_tree.delete(item)
         for index, residue in enumerate(summary["protein_residues"]):
@@ -1342,6 +1951,26 @@ class WorkflowGui:
                     residue.atom_count,
                 ),
             )
+
+    def _selected_preprocess_chains(self) -> set[str]:
+        return {
+            self.pdb_chain_ids[index]
+            for index in self.pdb_chain_listbox.curselection()
+            if index < len(self.pdb_chain_ids)
+        }
+
+    def select_all_pdb_chains(self):
+        self.pdb_chain_listbox.selection_set(0, END)
+
+    def select_protein_pdb_chains(self):
+        self.pdb_chain_listbox.selection_clear(0, END)
+        for index, chain in enumerate(self.pdb_chain_ids):
+            if self.pdb_chain_info.get(chain, {}).get("protein_residues", 0):
+                self.pdb_chain_listbox.selection_set(index)
+
+    def _format_chain_map(self, chain_map: dict[str, str]) -> str:
+        changes = [f"{old}->{new}" for old, new in chain_map.items() if old != new]
+        return ", ".join(changes) if changes else "unchanged"
 
     def generate(self):
         try:
@@ -1444,7 +2073,7 @@ class WorkflowGui:
     def _stage_scripts_for_config(self, data: dict) -> dict:
         target = str(data.get("target") or "TARGET")
         pilot = str(data.get("pilot") or "pilot0")
-        relax_cycles = data.get("proteinmpnn", {}).get("relax_cycles", 4)
+        relax_cycles = data.get("proteinmpnn", {}).get("relax_cycles") or 4
         return {
             "RFDiffusion": f"1.RFDiffusion/submit_{target}_rfdiffusion_{pilot}.sh",
             "ProteinMPNN": f"2.ProteinMPNN/submit_{target}_mpnn_relax{relax_cycles}_shards.sh",
@@ -1459,6 +2088,8 @@ class WorkflowGui:
             return f"{parent}/{workflow_name}"
         remote_workflow_dir = str(profile.get("remote_workflow_dir") or "").strip().rstrip("/")
         if remote_workflow_dir:
+            if "/" not in remote_workflow_dir:
+                return workflow_name
             parent = remote_workflow_dir.rsplit("/", 1)[0]
             return f"{parent}/{workflow_name}"
         return workflow_name
@@ -1517,7 +2148,10 @@ class WorkflowGui:
         self.save_cluster_profile()
 
     def _refresh_stage_selector(self):
-        stage_names = list(self.cluster_profile.get("stage_scripts", {}).keys())
+        try:
+            stage_names = list(self._collect_cluster_profile().get("stage_scripts", {}).keys())
+        except Exception:
+            stage_names = list(self.cluster_profile.get("stage_scripts", {}).keys())
         if hasattr(self, "stage_box"):
             self.stage_box.configure(values=stage_names)
         if stage_names and self.stage_var.get() not in stage_names:
@@ -1556,11 +2190,12 @@ class WorkflowGui:
                 f"Local input PDB: {data.get('local_input_pdb')}",
                 f"Chains: target={data.get('target_chain')} binder={data.get('binder_chain')}",
                 f"Contigs: {data.get('contigs')}",
+                f"Hotspots: {data['rfdiffusion'].get('hotspot_res') or 'none'}",
                 f"Scratch: /scratch/{data.get('scratch_date')}/{data.get('cluster_user')}/{data.get('project_dir_name')}",
                 f"RFDiffusion: {data['rfdiffusion'].get('n_shards')} shards × {data['rfdiffusion'].get('designs_per_shard')} designs, GPU queue={data['rfdiffusion'].get('queue')}, GPU cores={data['rfdiffusion'].get('gpu_ncpu')}",
-                f"ProteinMPNN: {data['proteinmpnn'].get('n_shards')} shards, relax={data['proteinmpnn'].get('relax_cycles')}, queue={data['proteinmpnn'].get('queue')}",
+                f"ProteinMPNN: {data['proteinmpnn'].get('n_shards')} shards, seqs={data['proteinmpnn'].get('seqs_per_struct')}, relax={data['proteinmpnn'].get('relax_cycles')}, LSF -n={data['proteinmpnn'].get('ncpu')}, LSF -R={data['proteinmpnn'].get('resource_req') or 'omitted'}, queue={data['proteinmpnn'].get('queue')}",
                 f"AfCycDesign: {data['afcyc'].get('n_shards')} shards, GPU queue={data['afcyc'].get('gpu_queue')}, GPU cores={data['afcyc'].get('gpu_ncpu')}, CPU queue={data['afcyc'].get('cpu_queue')}",
-                f"PyRosetta: {data['pyrosetta'].get('n_shards')} shards, queue={data['pyrosetta'].get('queue')}",
+                f"PyRosetta: {data['pyrosetta'].get('n_shards')} shards, LSF -n={data['pyrosetta'].get('ncpu')}, LSF -R={data['pyrosetta'].get('resource_req') or 'omitted'}, queue={data['pyrosetta'].get('queue')}",
             ]
             self.parameter_summary.delete("1.0", END)
             self.parameter_summary.insert(END, "\n".join(lines))
@@ -1643,14 +2278,39 @@ class WorkflowGui:
 
     def submit_selected_stage(self):
         stage_name = self.stage_var.get()
+        data = self._collect_config()
+        output_dir = Path(self.output_dir_var.get()).expanduser()
         profile = self._collect_cluster_profile()
         script = profile.get("stage_scripts", {}).get(stage_name, "")
-        self._log(f"Submit target workflow: {profile.get('remote_workflow_dir')} :: {stage_name} -> {script}")
+        local_dir = output_dir / f"{data['target']}_workflow"
+        self.config_data = data
+        self.output_dir = output_dir
+        self._update_parameter_summary()
+        self._update_current_project_banner()
+        self._log(
+            f"Sync and submit current config: target={data.get('target')} pilot={data.get('pilot')} "
+            f"-> {profile.get('remote_workflow_dir')} :: {stage_name} -> {script}"
+        )
 
-        def on_success(_result):
+        def worker():
+            generate_workflow.generate(data, output_dir, force=True)
+            upload_result = cluster_ops.upload_workflow(profile, local_dir)
+            if upload_result.returncode != 0:
+                return [upload_result]
+            submit_result = cluster_ops.submit_stage(profile, stage_name)
+            return [upload_result, submit_result]
+
+        def on_success(results):
+            if isinstance(results, list) and results:
+                if len(results) == 1 and results[0].returncode != 0:
+                    self._set_status(f"Upload failed; {stage_name} was not submitted")
+                    return
+                if results[-1].returncode != 0:
+                    self._set_status(f"Submit failed: {stage_name}")
+                    return
             self.refresh_jobs()
 
-        self._run_background(f"Submit {stage_name}", lambda: cluster_ops.submit_stage(profile, stage_name), on_success)
+        self._run_background(f"Sync and submit {stage_name}", worker, on_success)
 
     def refresh_jobs(self):
         if hasattr(self, "job_summary_var"):
@@ -1688,6 +2348,33 @@ class WorkflowGui:
             "View bjobs -l",
             lambda: cluster_ops.describe_jobs(self._collect_cluster_profile(), job_ids),
             on_success,
+        )
+
+    def query_queue_info(self, mode: str):
+        queue_name = self.queue_name_var.get().strip()
+        if mode == "detail" and not queue_name:
+            messagebox.showinfo("Queue name required", "Enter a queue name before running queueinfo -l.")
+            return
+        label = "queueinfo"
+        if mode == "gpu":
+            label = "queueinfo -gpu"
+        elif mode == "detail":
+            label = f"queueinfo -l {queue_name}"
+        self.queue_status_var.set(f"Running: {label}")
+
+        def on_success(result):
+            content = result.stdout.strip() or result.stderr.strip() or f"{label} returned no output."
+            if result.returncode == 0:
+                self.queue_status_var.set(f"Finished: {label}")
+            else:
+                self.queue_status_var.set(f"Failed: {label} exit {result.returncode}")
+            self._show_text_window(label, content)
+
+        self._run_background(
+            label,
+            lambda: cluster_ops.queue_info(self._collect_cluster_profile(), mode=mode, queue_name=queue_name),
+            on_success,
+            lambda exc: self.queue_status_var.set(f"Failed: {label}: {exc}"),
         )
 
     def scan_results(self):
@@ -1750,12 +2437,52 @@ class WorkflowGui:
 
         def on_success(result):
             command_result, entries = result
-            self.data_csv_entries = entries
-            self._populate_data_csv_tree(entries)
+            self.data_csv_all_entries = entries
+            self._refresh_data_csv_filter_values()
+            self._apply_data_csv_filter()
             self.data_status_var.set(f"Found {len(entries)} merged CSV files")
             self._log(f"Merged CSV scan exit {command_result.returncode}; {len(entries)} files found.")
 
         self._run_background("Scan merged CSV files", worker, on_success)
+
+    def _refresh_data_csv_filter_values(self):
+        if not hasattr(self, "data_filter_boxes"):
+            return
+        for key, box in self.data_filter_boxes.items():
+            values = sorted({str(entry.get(key) or "unknown") for entry in self.data_csv_all_entries})
+            selected = getattr(self, f"data_{key}_filter_var").get()
+            box.configure(values=["All"] + values)
+            if selected not in ["All"] + values:
+                getattr(self, f"data_{key}_filter_var").set("All")
+
+    def _entry_matches_data_filters(self, entry: dict) -> bool:
+        filters = {
+            "target": self.data_target_filter_var.get(),
+            "pilot": self.data_pilot_filter_var.get(),
+            "stage": self.data_stage_filter_var.get(),
+            "shard": self.data_shard_filter_var.get(),
+        }
+        for key, selected in filters.items():
+            if selected != "All" and str(entry.get(key) or "unknown") != selected:
+                return False
+        query = self.data_csv_search_var.get().strip().lower()
+        if query:
+            haystack = " ".join(str(entry.get(key, "")) for key in ("target", "pilot", "stage", "shard", "name", "path")).lower()
+            if query not in haystack:
+                return False
+        return True
+
+    def _apply_data_csv_filter(self):
+        if not hasattr(self, "data_csv_tree"):
+            return
+        self.data_csv_entries = [
+            entry
+            for entry in self.data_csv_all_entries
+            if self._entry_matches_data_filters(entry)
+        ]
+        self._populate_data_csv_tree(self.data_csv_entries)
+        if hasattr(self, "data_status_var") and self.data_csv_all_entries:
+            self.data_status_var.set(f"Merged CSV visible: {len(self.data_csv_entries)} / scanned: {len(self.data_csv_all_entries)}")
 
     def _populate_data_csv_tree(self, entries: list[dict]):
         for item in self.data_csv_tree.get_children():
@@ -1820,10 +2547,6 @@ class WorkflowGui:
         profile = self._collect_cluster_profile()
         download_root = self._result_download_root([entry])
         local_path = cluster_ops.local_download_path_for_entry(profile, entry, download_root, layout="stage")
-        if local_path.exists():
-            self.data_status_var.set(f"Using local merged CSV for analysis: {local_path}")
-            self._load_local_data_csv(local_path)
-            return
 
         def on_success(results):
             failures = sum(1 for result in results if result.returncode != 0)
@@ -1837,9 +2560,10 @@ class WorkflowGui:
                 self.data_status_var.set(f"Download finished but merged CSV was not found: {local_path}")
                 messagebox.showerror("CSV not downloaded", f"Expected file was not found:\n{local_path}")
 
-        self.data_status_var.set(f"Downloading merged CSV for analysis to {local_path.parent} ...")
+        refresh_note = "refreshing existing local copy" if local_path.exists() else "downloading"
+        self.data_status_var.set(f"{refresh_note.capitalize()} merged CSV for analysis to {local_path.parent} ...")
         self._run_background(
-            "Download merged CSV for analysis",
+            "Refresh merged CSV for analysis",
             lambda: cluster_ops.download_files(profile, [entry], local_dir=download_root, layout="stage"),
             on_success,
             lambda exc: self.data_status_var.set(f"Download failed: {exc}"),
@@ -1859,10 +2583,39 @@ class WorkflowGui:
         self.data_metric_box.configure(values=numeric_headers)
         if self.data_metric_var.get() not in numeric_headers:
             self.data_metric_var.set(numeric_headers[0])
+        total_rows = self._count_csv_data_rows(path)
         self.data_status_var.set(
-            f"Loaded {path.name}; {len(numeric_headers)} numeric columns from {sampled_rows} sampled rows. "
+            f"Loaded {path.name}; rows={total_rows}, {len(numeric_headers)} numeric columns from {sampled_rows} sampled rows. "
             "Select a metric, then click Plot histogram + scatter."
         )
+
+    def _count_csv_data_rows(self, path: Path) -> int:
+        with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
+            reader = csv.reader(handle)
+            try:
+                next(reader)
+            except StopIteration:
+                return 0
+            return sum(1 for _row in reader)
+
+    def use_afcyc_metric_defaults(self):
+        self._apply_metric_preset(AFCYC_SCORE_PRESETS, "AfCycDesign")
+
+    def use_pyrosetta_metric_defaults(self):
+        self._apply_metric_preset(PYROSETTA_SCORE_PRESETS, "PyRosetta")
+
+    def _apply_metric_preset(self, presets: list[tuple[str, str, str]], label: str):
+        if not self.data_loaded_headers:
+            self.data_status_var.set(f"Load a merged CSV before applying {label} metric defaults.")
+            return
+        for metric, direction, percentile in presets:
+            if metric in self.data_loaded_headers:
+                self.data_metric_var.set(metric)
+                self.data_metric_direction_var.set(direction)
+                self.data_percentile_var.set(percentile)
+                self.data_status_var.set(f"{label} default metric selected: {metric} ({direction} is better)")
+                return
+        self.data_status_var.set(f"No {label} default metric was found in the loaded CSV.")
 
     def _detect_numeric_csv_headers(self, path: Path, sample_limit: int = 5000) -> tuple[list[str], int]:
         with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
@@ -1891,6 +2644,7 @@ class WorkflowGui:
             messagebox.showinfo("No metric selected", "Select a numeric metric first.")
             return
         try:
+            higher_is_better = self.data_metric_direction_var.get() != "lower"
             percentile = max(0.0, min(100.0, float(self.data_percentile_var.get().strip() or "90")))
             bins = max(5, min(200, int(self.data_bins_var.get().strip() or "40")))
             custom_threshold = self._to_float(self.data_threshold_var.get().strip())
@@ -1912,18 +2666,396 @@ class WorkflowGui:
                 return
             percentile_value = self._percentile(display_values, percentile)
             candidate_threshold = custom_threshold if custom_threshold is not None else percentile_value
-            candidates, total_passing = self._read_candidate_rows(self.data_loaded_csv_path, metric, candidate_threshold, low, high)
+            candidates, total_passing = self._read_candidate_rows(self.data_loaded_csv_path, metric, candidate_threshold, low, high, higher_is_better=higher_is_better)
             self._draw_metric_histogram(values, bins, percentile_value, custom_threshold, percentile, low, high, outside_count, range_note)
             self._draw_metric_scatter(values, percentile_value, custom_threshold, percentile, low, high, outside_count, range_note)
             self._populate_candidate_rows(candidates)
             threshold_label = "custom threshold" if custom_threshold is not None else f"P{percentile:g}"
+            operator = ">=" if higher_is_better else "<="
             self.data_status_var.set(
                 f"{metric}: n={len(values)}, displayed={len(display_values)}, P{percentile:g} within range={percentile_value:.4g}, "
-                f"{threshold_label}>={candidate_threshold:.4g}, range=[{low:.4g}, {high:.4g}], "
-                f"outside={outside_count}, candidates={total_passing} (showing {len(candidates)})"
+                f"{threshold_label}{operator}{candidate_threshold:.4g}, direction={self.data_metric_direction_var.get()}, range=[{low:.4g}, {high:.4g}], "
+                f"outside={outside_count}, candidates={total_passing} (table shows top {len(candidates)}, capped at 500)"
             )
         except Exception as exc:
             self._show_error("Failed to analyze metric", exc)
+
+    def browse_hit_csv(self, kind: str):
+        initial_dir = self._default_hit_csv_browse_dir(kind)
+        path = filedialog.askopenfilename(
+            title="Choose merged CSV",
+            initialdir=str(initial_dir),
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        if kind == "afcyc":
+            self.hit_afcyc_csv_var.set(path)
+        else:
+            self.hit_pyro_csv_var.set(path)
+
+    def _default_hit_csv_browse_dir(self, kind: str) -> Path:
+        stage = "AfCycDesign" if kind == "afcyc" else "PyRosetta"
+        target = self._project_field("target") or self._download_target_for_entries(None)
+        output_dir = Path(self.output_dir_var.get()).expanduser()
+        browse_dir = output_dir / f"{cluster_ops.safe_local_name(target)}_workflow" / "retrieved_results" / stage
+        browse_dir.mkdir(parents=True, exist_ok=True)
+        return browse_dir
+
+    def set_hit_csv_from_selected(self, kind: str):
+        entry = self._selected_data_csv_entry()
+        if not entry:
+            return
+        profile = self._collect_cluster_profile()
+        download_root = self._result_download_root([entry])
+        local_path = cluster_ops.local_download_path_for_entry(profile, entry, download_root, layout="stage")
+        label = "AfCycDesign" if kind == "afcyc" else "PyRosetta"
+        if local_path.exists():
+            self._set_hit_csv_path(kind, local_path)
+            self.hit_status_var.set(f"{label} CSV selected: {local_path}")
+            return
+
+        def on_success(results):
+            failures = sum(1 for result in results if result.returncode != 0)
+            if local_path.exists():
+                self._set_hit_csv_path(kind, local_path)
+                if failures:
+                    self.hit_status_var.set(f"{label} CSV downloaded with {failures} failed command(s): {local_path}")
+                else:
+                    self.hit_status_var.set(f"{label} CSV downloaded and selected: {local_path}")
+            else:
+                self.hit_status_var.set(f"{label} CSV download finished but file was not found: {local_path}")
+
+        self.hit_status_var.set(f"Downloading selected {label} merged CSV to {local_path.parent} ...")
+        self._run_background(
+            f"Download {label} hit-screening CSV",
+            lambda: cluster_ops.download_files(profile, [entry], local_dir=download_root, layout="stage"),
+            on_success,
+            lambda exc: self.hit_status_var.set(f"Download failed: {exc}"),
+        )
+
+    def _set_hit_csv_path(self, kind: str, path: Path):
+        if kind == "afcyc":
+            self.hit_afcyc_csv_var.set(str(path))
+        else:
+            self.hit_pyro_csv_var.set(str(path))
+
+    def reset_hit_thresholds(self):
+        self.hit_afcyc_ipae_col_var.set(HIT_SCREEN_DEFAULTS["afcyc_ipae_column"])
+        self.hit_afcyc_ipae_max_var.set(HIT_SCREEN_DEFAULTS["afcyc_ipae_max"])
+        self.hit_afcyc_rmsd_col_var.set(HIT_SCREEN_DEFAULTS["afcyc_rmsd_column"])
+        self.hit_afcyc_rmsd_max_var.set(HIT_SCREEN_DEFAULTS["afcyc_rmsd_max"])
+        self.hit_afcyc_plddt_col_var.set(HIT_SCREEN_DEFAULTS["afcyc_plddt_column"])
+        self.hit_afcyc_plddt_min_var.set(HIT_SCREEN_DEFAULTS["afcyc_plddt_min"])
+        self.hit_pyro_dg_col_var.set(HIT_SCREEN_DEFAULTS["pyro_dg_column"])
+        self.hit_pyro_dg_max_var.set(HIT_SCREEN_DEFAULTS["pyro_dg_max"])
+        self.hit_pyro_sap_col_var.set(HIT_SCREEN_DEFAULTS["pyro_sap_column"])
+        self.hit_pyro_sap_max_var.set(HIT_SCREEN_DEFAULTS["pyro_sap_max"])
+        self.hit_pyro_cms_col_var.set(HIT_SCREEN_DEFAULTS["pyro_cms_column"])
+        self.hit_pyro_cms_min_var.set(HIT_SCREEN_DEFAULTS["pyro_cms_min"])
+        self.hit_pyro_sasa_col_var.set(HIT_SCREEN_DEFAULTS["pyro_sasa_column"])
+        self.hit_pyro_sasa_min_var.set(HIT_SCREEN_DEFAULTS["pyro_sasa_min"])
+        self.hit_pyro_packstat_col_var.set(HIT_SCREEN_DEFAULTS["pyro_packstat_column"])
+        self.hit_pyro_packstat_min_var.set(HIT_SCREEN_DEFAULTS["pyro_packstat_min"])
+        self.hit_status_var.set("Hit thresholds reset to RFpeptides-inspired defaults.")
+
+    def run_hit_screening(self):
+        try:
+            afcyc_path = self._required_csv_path(self.hit_afcyc_csv_var.get(), "AfCycDesign CSV")
+            pyro_path = self._required_csv_path(self.hit_pyro_csv_var.get(), "PyRosetta CSV")
+            thresholds = self._collect_hit_thresholds()
+            max_hits = max(1, min(5000, int(str(self.hit_limit_var.get()).strip() or "200")))
+            afcyc_rows = self._load_csv_rows(afcyc_path)
+            pyro_rows = self._load_csv_rows(pyro_path)
+            hits, stats = self._screen_hit_rows(afcyc_rows, pyro_rows, thresholds, max_hits)
+            self.hit_rows = hits
+            self._populate_hit_rows(hits)
+            self.hit_status_var.set(
+                f"Hit screening complete: {len(hits)} shown / {stats['passing']} passing; "
+                f"matched={stats['matched']}, AfCyc rows={len(afcyc_rows)}, PyRosetta rows={len(pyro_rows)}"
+            )
+        except Exception as exc:
+            self._show_error("Failed to run hit screening", exc)
+
+    def _required_csv_path(self, value: str, label: str) -> Path:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError(f"{label} is required")
+        path = Path(text).expanduser()
+        if not path.exists():
+            raise ValueError(f"{label} does not exist: {path}")
+        return path
+
+    def _load_csv_rows(self, path: Path) -> list[dict]:
+        with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
+            return list(csv.DictReader(handle))
+
+    def _collect_hit_thresholds(self) -> dict:
+        return {
+            "afcyc_ipae": (self.hit_afcyc_ipae_col_var.get().strip(), self._optional_float_entry(self.hit_afcyc_ipae_max_var.get(), "AfCyc iPAE max"), "max"),
+            "afcyc_rmsd": (self.hit_afcyc_rmsd_col_var.get().strip(), self._optional_float_entry(self.hit_afcyc_rmsd_max_var.get(), "AfCyc RMSD max"), "max"),
+            "afcyc_plddt": (self.hit_afcyc_plddt_col_var.get().strip(), self._optional_float_entry(self.hit_afcyc_plddt_min_var.get(), "binder pLDDT min"), "min"),
+            "pyro_dg": (self.hit_pyro_dg_col_var.get().strip(), self._optional_float_entry(self.hit_pyro_dg_max_var.get(), "interface dG max"), "max"),
+            "pyro_sap": (self.hit_pyro_sap_col_var.get().strip(), self._optional_float_entry(self.hit_pyro_sap_max_var.get(), "SAP max"), "max"),
+            "pyro_cms": (self.hit_pyro_cms_col_var.get().strip(), self._optional_float_entry(self.hit_pyro_cms_min_var.get(), "CMS min"), "min"),
+            "pyro_sasa": (self.hit_pyro_sasa_col_var.get().strip(), self._optional_float_entry(self.hit_pyro_sasa_min_var.get(), "interface SASA min"), "min"),
+            "pyro_packstat": (self.hit_pyro_packstat_col_var.get().strip(), self._optional_float_entry(self.hit_pyro_packstat_min_var.get(), "packstat min"), "min"),
+        }
+
+    def _screen_hit_rows(self, afcyc_rows: list[dict], pyro_rows: list[dict], thresholds: dict, max_hits: int) -> tuple[list[dict], dict]:
+        pyro_by_key = {}
+        for row in pyro_rows:
+            key = self._hit_key(row)
+            if key:
+                pyro_by_key.setdefault(key, row)
+
+        passing = []
+        matched = 0
+        for afcyc_row in afcyc_rows:
+            key = self._hit_key(afcyc_row)
+            if not key:
+                continue
+            pyro_row = pyro_by_key.get(key)
+            if not pyro_row:
+                continue
+            matched += 1
+            values = {
+                "afcyc_ipae": self._hit_threshold_value(afcyc_row, thresholds["afcyc_ipae"]),
+                "afcyc_rmsd": self._hit_threshold_value(afcyc_row, thresholds["afcyc_rmsd"]),
+                "afcyc_plddt": self._hit_threshold_value(afcyc_row, thresholds["afcyc_plddt"]),
+                "pyro_dg": self._hit_threshold_value(pyro_row, thresholds["pyro_dg"]),
+                "pyro_sap": self._hit_threshold_value(pyro_row, thresholds["pyro_sap"]),
+                "pyro_cms": self._hit_threshold_value(pyro_row, thresholds["pyro_cms"]),
+                "pyro_sasa": self._hit_threshold_value(pyro_row, thresholds["pyro_sasa"]),
+                "pyro_packstat": self._hit_threshold_value(pyro_row, thresholds["pyro_packstat"]),
+            }
+            if not self._hit_passes_thresholds(values, thresholds):
+                continue
+            passing.append({
+                "description": key,
+                "binder_seq": afcyc_row.get("binder_seq") or pyro_row.get("binder_seq") or "",
+                "i_pae": values["afcyc_ipae"],
+                "rmsd": values["afcyc_rmsd"],
+                "plddt": values["afcyc_plddt"],
+                "interface_dG": values["pyro_dg"],
+                "sap": values["pyro_sap"],
+                "sap_bound": values["pyro_sap"],
+                "cms": values["pyro_cms"],
+                "interface_delta_sasa": values["pyro_sasa"],
+                "interface_packstat": values["pyro_packstat"],
+                "afcyc_pdb": self._first_nonempty(afcyc_row, ["pred_pdb", "pred_pdb_rmsd"]),
+                "mpnn_pdb": self._first_nonempty(afcyc_row, ["input_pdb", "input_pdb_rmsd"]) or self._first_nonempty(pyro_row, ["pdb_path", "input_pdb"]),
+                "afcyc_row": afcyc_row,
+                "pyro_row": pyro_row,
+            })
+
+        passing.sort(key=self._hit_sort_key)
+        return passing[:max_hits], {"matched": matched, "passing": len(passing)}
+
+    def _hit_key(self, row: dict) -> str:
+        for key in ("description", "name", "tag", "model", "design"):
+            value = str(row.get(key, "")).strip()
+            if value:
+                return value
+        for key in ("pred_pdb", "input_pdb", "pdb_path"):
+            value = str(row.get(key, "")).strip()
+            if value:
+                return Path(value).stem.replace("_afcyc", "")
+        return ""
+
+    def _hit_threshold_value(self, row: dict, threshold_spec: tuple[str, float | None, str]) -> float | None:
+        column, threshold, _mode = threshold_spec
+        if threshold is None:
+            return self._to_float(row.get(column, "")) if column else None
+        if not column:
+            raise ValueError("A threshold was set but its CSV column is blank")
+        if column not in row:
+            raise ValueError(f"Column not found in CSV: {column}")
+        return self._to_float(row.get(column, ""))
+
+    def _hit_passes_thresholds(self, values: dict, thresholds: dict) -> bool:
+        for key, (_column, threshold, mode) in thresholds.items():
+            if threshold is None:
+                continue
+            value = values.get(key)
+            if value is None:
+                return False
+            if mode == "max" and value > threshold:
+                return False
+            if mode == "min" and value < threshold:
+                return False
+        return True
+
+    def _hit_sort_key(self, hit: dict):
+        return (
+            self._sort_float(hit.get("interface_dG"), default=math.inf),
+            self._sort_float(hit.get("i_pae"), default=math.inf),
+            self._sort_float(hit.get("rmsd"), default=math.inf),
+            self._sort_float(hit.get("sap"), default=math.inf),
+            -self._sort_float(hit.get("cms"), default=-math.inf),
+        )
+
+    def _sort_float(self, value, default: float) -> float:
+        return value if isinstance(value, (int, float)) and math.isfinite(value) else default
+
+    def _first_nonempty(self, row: dict, keys: list[str]) -> str:
+        for key in keys:
+            value = str(row.get(key, "")).strip()
+            if value:
+                return value
+        return ""
+
+    def _populate_hit_rows(self, hits: list[dict]):
+        for item in self.hit_tree.get_children():
+            self.hit_tree.delete(item)
+        for rank, hit in enumerate(hits, start=1):
+            self.hit_tree.insert(
+                "",
+                END,
+                iid=str(rank - 1),
+                values=(
+                    rank,
+                    hit.get("description", ""),
+                    self._format_optional_float(hit.get("i_pae")),
+                    self._format_optional_float(hit.get("rmsd")),
+                    self._format_optional_float(hit.get("plddt")),
+                    self._format_optional_float(hit.get("interface_dG")),
+                    self._format_optional_float(hit.get("sap")),
+                    self._format_optional_float(hit.get("cms")),
+                    hit.get("binder_seq", ""),
+                    hit.get("afcyc_pdb", ""),
+                    hit.get("mpnn_pdb", ""),
+                ),
+            )
+
+    def _format_optional_float(self, value) -> str:
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            return f"{value:.6g}"
+        return ""
+
+    def save_hit_screening_csv(self):
+        try:
+            if not self.hit_rows:
+                messagebox.showinfo("No hits", "Run hit screening first.")
+                return
+            output_path = self._timestamped_hit_csv_path()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            columns = self._hit_csv_columns()
+            with output_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=columns)
+                writer.writeheader()
+                for rank, hit in enumerate(self.hit_rows, start=1):
+                    writer.writerow(self._hit_csv_row(rank, hit, columns))
+            self.hit_status_var.set(f"Hit CSV saved: {output_path}")
+            self._log(f"Hit screening CSV saved: {output_path}")
+            messagebox.showinfo("Hit CSV saved", f"Saved {len(self.hit_rows)} hit row(s):\n{output_path}")
+        except Exception as exc:
+            self.hit_status_var.set(f"Hit CSV save failed: {exc}")
+            self._show_error("Failed to save hit CSV", exc)
+
+    def _hit_csv_columns(self) -> list[str]:
+        leading = ["rank", "description", "binder_seq"] + HIT_FILTER_OUTPUT_COLUMNS
+        remaining_pyro = [column for column in PYROSETTA_HIT_OUTPUT_COLUMNS if column not in HIT_FILTER_OUTPUT_COLUMNS]
+        trailing = ["afcyc_pdb", "mpnn_pdb"]
+        return leading + remaining_pyro + trailing
+
+    def _hit_csv_row(self, rank: int, hit: dict, columns: list[str]) -> dict:
+        pyro_row = hit.get("pyro_row") or {}
+        row = {
+            "rank": rank,
+            "description": hit.get("description", ""),
+            "binder_seq": hit.get("binder_seq", ""),
+            "i_pae": self._format_optional_float(hit.get("i_pae")),
+            "rmsd": self._format_optional_float(hit.get("rmsd")),
+            "plddt": self._format_optional_float(hit.get("plddt")),
+            "interface_dG": self._format_optional_float(hit.get("interface_dG")),
+            "sap_bound": self._format_optional_float(hit.get("sap_bound", hit.get("sap"))),
+            "cms": self._format_optional_float(hit.get("cms")),
+            "interface_delta_sasa": self._format_optional_float(hit.get("interface_delta_sasa")),
+            "interface_packstat": self._format_optional_float(hit.get("interface_packstat")),
+            "afcyc_pdb": hit.get("afcyc_pdb", ""),
+            "mpnn_pdb": hit.get("mpnn_pdb", ""),
+        }
+        for column in PYROSETTA_HIT_OUTPUT_COLUMNS:
+            if column not in row:
+                row[column] = pyro_row.get(column, "")
+        return {column: row.get(column, "") for column in columns}
+
+    def download_hit_structures(self, selected_only: bool):
+        if not self.hit_rows:
+            messagebox.showinfo("No hits", "Run hit screening first.")
+            return
+        if selected_only:
+            selected = list(self.hit_tree.selection())
+            if not selected:
+                messagebox.showinfo("No hits selected", "Select one or more hit rows first.")
+                return
+            hits = [self.hit_rows[int(item)] for item in selected]
+        else:
+            hits = self.hit_rows
+        entries = self._hit_download_entries(hits)
+        if not entries:
+            messagebox.showinfo("No structures", "No downloadable AfCyc or MPNN PDB paths were found in the hit rows.")
+            return
+        if not messagebox.askyesno("Confirm hit download", f"Download {len(entries)} structure file(s) for {len(hits)} hit(s)?"):
+            return
+        profile = self._collect_cluster_profile()
+        download_root = self._timestamped_hit_download_root(selected_only)
+
+        def on_success(results):
+            failures = sum(1 for result in results if result.returncode != 0)
+            self._log_download_results(results, download_root)
+            if failures:
+                self.hit_status_var.set(f"Hit structure download finished with {failures} failed command(s): {download_root}")
+            else:
+                self.hit_status_var.set(f"Hit structure download finished: {len(entries)} file(s) -> {download_root}")
+
+        self.hit_status_var.set(f"Downloading {len(entries)} hit structure file(s) to {download_root} ...")
+        self._run_background(
+            "Download hit structures",
+            lambda: cluster_ops.download_files(profile, entries, local_dir=download_root, layout="stage"),
+            on_success,
+            lambda exc: self.hit_status_var.set(f"Download failed: {exc}"),
+        )
+
+    def _hit_download_entries(self, hits: list[dict]) -> list[dict]:
+        entries = []
+        seen = set()
+        for hit in hits:
+            for stage, key in (("AfCycDesign_predicted", "afcyc_pdb"), ("MPNN_input", "mpnn_pdb")):
+                path = str(hit.get(key, "")).strip()
+                if not path or path in seen:
+                    continue
+                seen.add(path)
+                info = cluster_ops.classify_result_path(path)
+                entries.append({
+                    "path": path,
+                    "name": Path(path).name,
+                    "size": 0,
+                    "mtime": "",
+                    "target": info.get("target") or self._download_target_for_entries(None),
+                    "pilot": info.get("pilot") or self._current_pilot(),
+                    "stage": stage,
+                    "shard": info.get("shard") or "all",
+                    "type": "pdb",
+                })
+        return entries
+
+    def _hit_output_root(self) -> Path:
+        target = self._download_target_for_entries(None)
+        output_dir = Path(self.output_dir_var.get()).expanduser()
+        return output_dir / f"{cluster_ops.safe_local_name(target)}_workflow" / "retrieved_hits"
+
+    def _timestamped_hit_download_root(self, selected_only: bool) -> Path:
+        suffix = "selected" if selected_only else "all"
+        return self._timestamped_hit_run_root(suffix)
+
+    def _timestamped_hit_csv_path(self) -> Path:
+        return self._timestamped_hit_run_root("csv") / "hit_screening_filtered.csv"
+
+    def _timestamped_hit_run_root(self, suffix: str) -> Path:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return self._hit_output_root() / f"{timestamp}_{suffix}"
 
     def _to_float(self, value):
         try:
@@ -1980,6 +3112,7 @@ class WorkflowGui:
         low: float | None = None,
         high: float | None = None,
         limit: int = 500,
+        higher_is_better: bool = True,
     ) -> tuple[list[tuple], int]:
         heap = []
         total = 0
@@ -1993,17 +3126,23 @@ class WorkflowGui:
                     continue
                 if high is not None and value > high:
                     continue
-                if value < threshold:
+                if higher_is_better and value < threshold:
+                    continue
+                if not higher_is_better and value > threshold:
                     continue
                 total += 1
                 candidate_id = self._candidate_identifier(row)
                 summary = self._candidate_summary(row, metric)
-                item = (value, data_row_index, candidate_id, summary)
+                score = value if higher_is_better else -value
+                item = (score, value, data_row_index, candidate_id, summary)
                 if len(heap) < limit:
                     heapq.heappush(heap, item)
-                elif value > heap[0][0]:
+                elif score > heap[0][0]:
                     heapq.heapreplace(heap, item)
-        candidates = sorted(heap, key=lambda item: item[0], reverse=True)
+        candidates = [
+            (value, row_index, candidate_id, summary)
+            for _score, value, row_index, candidate_id, summary in sorted(heap, key=lambda item: item[0], reverse=True)
+        ]
         return candidates, total
 
     def _candidate_identifier(self, row: dict) -> str:
@@ -2689,6 +3828,13 @@ class WorkflowGui:
             return current_target
         return targets[0] if targets else "target"
 
+    def _current_pilot(self) -> str:
+        try:
+            pilot = str(self._collect_config().get("pilot") or "").strip()
+        except Exception:
+            pilot = ""
+        return pilot or "pilot"
+
     def _refresh_result_filter_values(self):
         if not hasattr(self, "result_filter_boxes"):
             return
@@ -3003,8 +4149,12 @@ class WorkflowGui:
         self.root.after(100, tick)
 
     def _log(self, message: str):
-        self.log_text.insert(END, message + "\n")
-        self.log_text.see(END)
+        self.log_lines.append(message)
+        if len(self.log_lines) > 5000:
+            self.log_lines = self.log_lines[-5000:]
+        if self.log_text is not None and self.log_text.winfo_exists():
+            self.log_text.insert(END, message + "\n")
+            self.log_text.see(END)
         self._append_debug_log(f"[LOG] {message}\n")
 
     def _record_command_result(self, description: str, result: cluster_ops.CommandResult):
@@ -3016,8 +4166,12 @@ class WorkflowGui:
             f"--- stdout ---\n{result.stdout.rstrip()}\n"
             f"--- stderr ---\n{result.stderr.rstrip()}\n"
         )
-        self.raw_output_text.insert(END, block)
-        self.raw_output_text.see(END)
+        self.raw_output_blocks.append(block)
+        if len(self.raw_output_blocks) > 1000:
+            self.raw_output_blocks = self.raw_output_blocks[-1000:]
+        if self.raw_output_text is not None and self.raw_output_text.winfo_exists():
+            self.raw_output_text.insert(END, block)
+            self.raw_output_text.see(END)
         self._append_debug_log(block)
 
     def _append_debug_log(self, text: str):
@@ -3029,7 +4183,9 @@ class WorkflowGui:
             pass
 
     def clear_raw_output(self):
-        self.raw_output_text.delete("1.0", END)
+        self.raw_output_blocks.clear()
+        if self.raw_output_text is not None and self.raw_output_text.winfo_exists():
+            self.raw_output_text.delete("1.0", END)
 
     def open_debug_log_folder(self):
         try:

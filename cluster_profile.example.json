@@ -40,7 +40,7 @@
     "PyRosetta": "4.PyRosetta/submit_pyrosetta_shards.sh"
   },
   "result_paths": [
-    "afcyc_out/pilot0/merged/results_merged.csv",
-    "pyrosetta_scores/pilot0/merged/pyrosetta_scores_merged.csv"
+    "afcyc_out/pilot0/merged/results_merged_PGLYRP1_pilot0.csv",
+    "pyrosetta_scores/pilot0/merged/pyrosetta_scores_merged_PGLYRP1_pilot0.csv"
   ]
 }

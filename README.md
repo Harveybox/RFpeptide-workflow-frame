@@ -29,7 +29,7 @@ Cluster connection editing has been moved out of `Cluster Dashboard` into the de
 - PyMOL executable path and `bjobs` user.
 - Result scan depth, log scan depth, result file patterns, and extra SSH args.
 
-`Cluster Dashboard` is now reserved for runtime operations: test connection, upload workflow, submit stage, refresh jobs, inspect pending reasons, and kill jobs.
+`Cluster Dashboard` is now reserved for runtime operations: test connection, upload workflow, submit stage, query queue status, refresh jobs, inspect pending reasons, and kill jobs.
 
 用于把 RFdiffusion → ProteinMPNN/relax → AfCycDesign/RMSD → PyRosetta 的 peptide binder 设计流程标准化，并通过本地 GUI 管理参数、生成脚本、提交集群任务、查看任务状态和下载结果。
 
@@ -46,6 +46,12 @@ A9-175/0 8-16
 ```
 
 这里的含义是：保留靶点 `A` 链 9–175 位残基，在其旁边生成一段长度约 8–16 aa 的新 binder。当前框架默认启用 cyclic peptide 设计，因此生成和后续评估都围绕“短肽首尾可环化、同时能稳定结合靶点”的目标展开。
+
+`RFDiffusion` 页中的 `Hotspot residues` 用于指定希望 binder 接触的靶点残基。可填写单个热点 `A326`，或多个热点 `A67,A141`；也接受备注式写法 `A326(F)`，生成脚本时会规范化为 `A326`。留空时不会写入热点参数。生成后的命令示例：
+
+```text
+'ppi.hotspot_res=[A67,A141]'
+```
 
 ### 阶段 1：RFDiffusion 生成 binder 骨架
 
@@ -107,6 +113,7 @@ A9-175/0 8-16
 ## 功能
 
 - 编辑靶点参数：target、pilot、PDB、chain、contig、scratch 路径等。
+- 在 `Project` 页填写基本信息后，一键同步各阶段的项目派生路径和 Results/Scratch 上下文。
 - 编辑各阶段参数：队列、环境名、脚本路径、shard 数、recycle/model 数等。
 - 一键生成四阶段 LSF 提交脚本。
 - 通过 SSH/SCP 上传 workflow 到集群。
@@ -124,11 +131,18 @@ A9-175/0 8-16
 GUI 的第一个页签是 `PDB Preprocess`，用于在正式生成 workflow 前处理靶点输入结构：
 
 - 顶部 `Local PDB` 可直接选择本地原始 PDB，并用 `Preview/Clean` 打开预处理页，避免反复手写路径。
-- `Preview sequence` 会读取 PDB 中的蛋白质残基，按 chain 和 residue number 显示序列，并在右侧表格列出 `chain / resseq / insertion code / resname / one-letter aa / atom count`。
+- `Experimental RCSB PDB fetch` 可输入四位 PDB ID，例如 `8BAV`，从 RCSB 下载 legacy PDB 格式文件到 `inputs_preprocessed/rcsb/`。如果某个超大结构只提供 mmCIF，需要手动下载并转换为 PDB 后再使用当前清理功能。
+- `Preview structure` 会读取蛋白质残基，按 chain 和 residue number 显示序列，并在右侧表格列出 `chain / resseq / insertion code / resname / one-letter aa / atom count`。
+- `Structure components` 会以易读分区显示 PDB 标题、各链的 molecule 描述、PDB/UniProt 数据库引用、蛋白质/非蛋白质残基数量、非标准成分及其 `HETNAM` 描述、生物学 assembly 和 alternate-location 原子统计。
+- `Chains to keep` 支持 Ctrl/Shift 多选；`Select all`、`Protein chains` 和 `Clear` 用于快速调整。`Apply cleanup / keep chains` 只保留选中的链。
+- 清理后的 PDB 会重建保留链的 `COMPND` 描述并保留可用的 `DBREF` 信息，因此再次预览时不会丢失 chain description。
+- `Rename retained chains from A` 会按原文件中的链顺序，把保留链依次重命名为 `A`、`B`、`C`……；完成后的状态栏会显示旧链到新链的映射。启用后需要确认 `target_chain`、RFdiffusion `contigs` 和 `Hotspot residues` 都使用新的链编号。
 - `Remove non-protein components` 会移除水、离子、小分子配体等非蛋白质 `HETATM`/残基；`MSE` 会按蛋白质残基识别为 `M`。
 - `Renumber atom serials` 只重排 atom serial，通常安全，不改变 RFdiffusion contig 使用的残基编号。
 - `Renumber residues continuously by chain` 会把每条链的残基重新编号为连续编号；这会改变 RFdiffusion 的 `contigs` 所引用的 residue number，因此只有在你明确要清理不连续编号时再启用。
-- `Clean PDB` 写出清理后的 PDB；勾选 `Set cleaned PDB as workflow input` 后，生成 workflow 时会自动把这个清理后的 PDB 打包到 `inputs/` 中。
+- 选择或 fetch 新结构时会在 `inputs_preprocessed/originals/` 建立原始快照；`Restore original PDB` 可一键恢复当前预览和 workflow 输入。
+- `Apply cleanup / keep chains` 写出清理后的 PDB；勾选 `Set cleaned PDB as workflow input` 后，生成 workflow 时会自动把这个清理后的 PDB 打包到 `inputs/` 中。
+- 所有主要页面现在使用统一的横向和纵向滚动容器；表格内部仍保留各自的滚动条。
 
 ## 文件结构
 
@@ -244,25 +258,29 @@ Copy-Item .\cluster_profile.example.json .\cluster_profile.local.json
 
 ## 推荐使用流程
 
-1. 在 GUI 中打开 `configs/PGLYRP1.json` 或另存为新靶点配置。
-2. 查看顶部深色横幅，确认当前 `target`、`pilot`、配置文件名和 scratch 项目目录无误。
-3. 修改靶点参数和各阶段 shard/queue/env/script。
-4. 点击 `Generate workflow` 生成本地提交脚本。
-5. 在 `Cluster Dashboard` 中加载 `cluster_profile.local.json`。
-6. 在 `Authentication` 中选择 `password`，输入你的集群密码；如需保存，勾选 `Remember securely`。
-7. 点击 `Test connection` 确认 SSH、`bjobs`、`bsub`、`bkill` 可用。
-8. 点击 `Upload workflow` 上传生成目录到集群。
-9. 选择阶段并点击 `Submit stage` 提交任务。
-10. 勾选 `Auto refresh every 10s` 实时刷新 `bjobs` 状态。
-11. 需要停止任务时，选择任务后点 `Kill selected`，或点 `Kill all visible` 批量 `bkill`。
-12. 任务处于 `PEND` 时，可选中任务并点击 `View bjobs -l` 查看 LSF 返回的 pending reason。
+1. 在 GUI 中打开一个配置模板，或另存为新靶点配置。
+2. 在 `Project` 页填写 `target`、`pilot`、cluster user、scratch date、scratch project dir 和 cluster HOME project dir。
+3. 点击 `Apply project info to all pages`。它会先根据 Cluster Settings 的 `remote_upload_parent` 推导 `<remote_upload_parent>/<target>_workflow`，再把远程输入 PDB 设置为该目录下的 `inputs/<pdb name>`，把 AfCycDesign/PyRosetta 脚本设置为 `scripts/<bundled script name>`。它还会同步 Results Browser 扫描日期/用户、Scratch Safety 来源日期/用户以及 Dashboard 远程 workflow 目录。为空的 `pilot`、scratch project dir 和 HOME project dir 会分别补为 `pilot0`、`<target>_test` 和 `$HOME/<target>`。
+4. 检查 RFDiffusion 的 chain、contig、hotspot residues，以及各阶段 queue、shard、recycle/model 等计算参数；同步按钮不会修改这些计算参数。
+5. 点击顶部 `Save` 保存配置，再点击 `Generate workflow` 生成本地提交脚本。
+6. 在 `Cluster Dashboard` 中加载 `cluster_profile.local.json`。
+7. 在 `Authentication` 中选择 `password`，输入你的集群密码；如需保存，勾选 `Remember securely`。
+8. 点击 `Test connection` 确认 SSH、`bjobs`、`bsub`、`bkill`、`queueinfo` 可用。
+9. 点击 `Upload workflow` 上传生成目录到集群。
+10. 选择阶段并点击 `Submit stage` 提交任务。
+11. 在 `Queue status` 中点击 `queueinfo` 查看全部队列，点击 `queueinfo -gpu` 查看 GPU 队列；填写队列名后点击 `queueinfo -l` 查看具体队列。
+12. 勾选 `Auto refresh every 10s` 实时刷新 `bjobs` 状态。
+13. 需要停止任务时，选择任务后点 `Kill selected`，或点 `Kill all visible` 批量 `bkill`。
+14. 任务处于 `PEND` 时，可选中任务并点击 `View bjobs -l` 查看 LSF 返回的 pending reason。
 
 `Upload workflow` 和 `Submit stage` 会按当前打开的 workflow 配置动态派生远程目录和提交脚本名。例如当前 `target=BPIFA1` 时，即使 `cluster_profile.local.json` 里仍残留 `PGLYRP1_workflow`，GUI 也会提交 `$HOME/RFpeptide-workflow-frame/BPIFA1_workflow` 下的 `submit_BPIFA1_...sh`。提交前日志会打印实际使用的远程 workflow 目录和阶段脚本。
-13. 查看 `Raw SSH/LSF output` 面板，确认提交、删除、下载等命令的完整返回。
-14. 在 `Results Browser` 中点击 `Scan scratch` 扫描 scratch 输出。
-15. 用搜索框、下拉筛选和列标题排序定位目标文件。
-16. 点击 `Scan logs/errors` 专门扫描 `.out/.err` 文件，选中后可用 `Preview log text` 预览。
-17. 点击 `Download selected` 或 `Download all filtered` 下载文件。
+
+生成真实项目时，`local_afcyc_script`、`local_rmsd_script`、`local_merge_script`、PyRosetta `local_script` 和 `local_merge_script` 必须指向真实计算脚本。`examples/scripts/` 下的是 release 演示用 dummy entrypoint；生成器现在会拒绝把这些 dummy 脚本打包到非 `DUMMY` 靶点。AfCyc shard 运行结束后也会检查 `results.csv` 和 `pred_pdbs/*.pdb`，缺少结果时任务会明确以错误状态退出，而不是显示 `Done` 但输出为空。
+15. 查看 `Raw SSH/LSF output` 面板，确认提交、删除、队列查询、下载等命令的完整返回。
+16. 在 `Results Browser` 中点击 `Scan scratch` 扫描 scratch 输出。
+17. 用搜索框、下拉筛选和列标题排序定位目标文件。
+18. 点击 `Scan logs/errors` 专门扫描 `.out/.err` 文件，选中后可用 `Preview log text` 预览。
+19. 点击 `Download selected` 或 `Download all filtered` 下载文件。
 
 ## Scratch Safety
 
@@ -357,16 +375,36 @@ generated_examples/<target>_workflow/retrieved_results/<stage>/<target>/<pilot>/
 
 ## 初步数据处理
 
-`Data Processing` 页只扫描 merged CSV，例如 `results_merged.csv` 和 `pyrosetta_scores_merged.csv`。选中 CSV 后可以：
+`Data Processing` 页只扫描 merged CSV，例如 `results_merged_<target>_<pilot>.csv` 和 `pyrosetta_scores_merged_<target>_<pilot>.csv`。选中 CSV 后可以：
 
 - `Preview selected CSV`：用分页 CSV 浏览器查看大表。
 - `Load for analysis`：检测可数值化的指标列。
-- `Analyze metric`：对选中指标同时画直方图和按 CSV 顺序排列的散点图，并默认标记当前显示范围内的 90% 分位线。
+- `Plot histogram + scatter`：对选中指标同时画直方图和按 CSV 顺序排列的散点图，并默认标记当前显示范围内的 percentile 分位线。
+- `AfCyc defaults` / `PyRosetta defaults`：自动选择常用打分项和方向，例如 AfCycDesign 的低 iPAE/RMSD、PyRosetta 的低 interface_dG 或高 CMS。
+- `Direction`：设置候选条目是按 `higher` 还是 `lower` 方向筛选；PyRosetta 的 `interface_dG`、`SAP`、unsat 等通常用 `lower`。
 - `Hist min` / `Hist max`：手动指定直方图和散点图的显示上下限；百分位数和默认候选阈值会基于这个范围内的数据重新计算。
 - `Auto robust range 1-99% when min/max blank`：上下限留空时只用 1–99% 范围绘图，减少极端异常值对尺度的扭曲；候选筛选仍基于完整数据。
 - `Custom threshold`：填写后按自定义阈值列举候选；为空时按 percentile 阈值列举。
 
-候选表会列出高于阈值的 top 条目，包括 CSV 行号、指标值、自动推断的候选 ID 和若干摘要字段。当前默认假设“指标越高越好”；如果某些 PyRosetta 指标需要越低越好，先不要用该候选表做最终筛选，应手动查看或后续扩展方向选项。
+候选表会按所选方向列出通过阈值的 top 条目，包括 CSV 行号、指标值、自动推断的候选 ID 和若干摘要字段。`Data Processing` 的 CSV 列表有独立的 `Search`、`Target`、`Pilot`、`Stage` 和 `Shard` 筛选状态，不会影响 `Results Browser`。
+
+### Hit 筛选
+
+`Data Processing` 页下方的 `Hit screening from AfCycDesign + PyRosetta merged CSV` 用于把 AfCycDesign 和 PyRosetta 的 merged CSV 合并筛选。典型用法：
+
+1. 在 `Merged CSV scan` 中扫描 scratch，并分别选中 AfCycDesign 和 PyRosetta 的 merged CSV。
+2. 在 hit screening 的 `CSV inputs` 中分别点击 `Use selected scanned CSV`，程序会自动下载远端 CSV 并填入本地路径；也可以用 `Browse` 选择本地 CSV。
+3. 使用默认阈值或手动调整列名/阈值。默认参考 RFpeptides 论文中的筛选逻辑：低 AfCycDesign iPAE、低设计模型与 AfCycDesign 预测 RMSD、低 Rosetta/PyRosetta interface dG、低 SAP、高 CMS。`binder pLDDT` 阈值留空时不参与筛选。
+4. 点击 `Run hit screening`。命中结果按 interface dG、iPAE、RMSD、SAP 和 CMS 排序。
+5. 点击 `Save hit CSV` 导出 `generated_examples/<target>_workflow/retrieved_hits/<timestamp>_csv/hit_screening_filtered.csv`。
+6. 选中 hit 后点击 `Download selected hit structures`，或点击 `Download all hit structures`，下载对应 AfCycDesign 预测结构和 MPNN 输入结构。
+
+下载结构会保存到：
+
+```text
+generated_examples/<target>_workflow/retrieved_hits/AfCycDesign_predicted/
+generated_examples/<target>_workflow/retrieved_hits/MPNN_input/
+```
 
 ### 任务日志和报错文件
 

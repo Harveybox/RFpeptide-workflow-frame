@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 from string import Template
@@ -25,6 +26,52 @@ def render(template: str, values: dict) -> str:
     return Template(template).safe_substitute(values).rstrip() + "\n"
 
 
+def normalize_hotspot_res(value) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    text = text.strip("[]").replace(";", ",")
+    tokens = [token for token in re.split(r"[,\s]+", text) if token]
+    normalized = []
+    invalid = []
+    for token in tokens:
+        clean = re.sub(r"\([A-Za-z]{1,3}\)$", "", token.strip())
+        if not re.fullmatch(r"[A-Za-z]-?\d+[A-Za-z]?", clean):
+            invalid.append(token)
+            continue
+        if clean not in normalized:
+            normalized.append(clean)
+    if invalid:
+        raise ValueError(
+            "Invalid RFDiffusion hotspot residue(s): "
+            + ", ".join(invalid)
+            + ". Use chain plus residue number, for example A326 or A67,A141."
+        )
+    return normalized
+
+
+def lsf_resource_lines(value) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    lines = []
+    for raw_part in re.split(r"[\n;]+", text):
+        part = raw_part.strip()
+        if not part:
+            continue
+        if part.startswith("#BSUB"):
+            match = re.search(r"-R\s+(.+)$", part)
+            if not match:
+                continue
+            part = match.group(1).strip()
+        part = part.strip().strip('"').strip("'")
+        if part:
+            lines.append(f'#BSUB -R "{part.replace(chr(34), chr(92) + chr(34))}"')
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
 def write_file(path: Path, content: str, force: bool) -> None:
     if path.exists() and not force:
         raise FileExistsError(f"{path} already exists; pass --force to overwrite")
@@ -42,6 +89,45 @@ def copy_file(source: Path, destination: Path, force: bool) -> None:
         raise FileExistsError(f"{destination} already exists; pass --force to overwrite")
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
+
+
+def is_dummy_bundle_script(path: Path) -> bool:
+    if path.suffix.lower() != ".py":
+        return False
+    text = path.read_text(encoding="utf-8", errors="replace")[:4000].lower()
+    return (
+        "dummy " in text
+        and (
+            "entrypoint for release/demo workflow generation" in text
+            or "replace this file path with the real" in text
+        )
+    )
+
+
+def validate_bundle_sources(config: dict, bundle_sources: dict[Path, str | None]) -> dict[Path, Path]:
+    resolved_sources = {}
+    errors = []
+    allow_dummy = str(config.get("target") or "").upper().startswith("DUMMY")
+    for destination, source in bundle_sources.items():
+        if not source:
+            errors.append(f"{destination}: no local source configured")
+            continue
+        source_path = resolve_local_path(source)
+        if not source_path.is_file():
+            errors.append(f"{destination}: source not found: {source_path}")
+            continue
+        if not allow_dummy and destination.parent.name == "scripts" and is_dummy_bundle_script(source_path):
+            errors.append(
+                f"{destination}: demo/dummy script selected for production target: {source_path}"
+            )
+            continue
+        resolved_sources[destination] = source_path
+    if errors:
+        raise ValueError(
+            "Invalid workflow bundle sources. Select real local AfCycDesign/PyRosetta scripts before generating:\n"
+            + "\n".join(errors)
+        )
+    return resolved_sources
 
 
 def resolve_local_path(path: str) -> Path:
@@ -102,7 +188,7 @@ for i in $(seq 0 $((N_SHARDS-1))); do
 
     bsub <<EOF
 #!/bin/bash
-#BSUB -J ${target_lower}_${pilot}_rfd_${shard}
+#BSUB -J ${target}-${pilot}-rfdiffusion-shard${shard}
 #BSUB -q ${QUEUE}
 #BSUB -n ${rf_gpu_ncpu}
 #BSUB -R ${rf_gpu_span}
@@ -129,7 +215,7 @@ export HYDRA_FULL_ERROR=1
   inference.output_prefix="\$SHARD_PREFIX" \
   inference.num_designs=${DESIGNS_PER_SHARD} \
   'contigmap.contigs=[${contigs}]' \
-  inference.input_pdb="\$INPUT_PDB" \
+${rf_hotspot_line}  inference.input_pdb="\$INPUT_PDB" \
   inference.cyclic=True \
   diffuser.T=${rf_diffuser_T} \
   inference.cyc_chains='a'
@@ -203,12 +289,10 @@ for RUNLIST in "$RUNLIST_DIR"/runlist_*.txt; do
 
     bsub <<EOF
 #!/bin/bash
-#BSUB -J ${target_lower}_mpnn_${shard}
+#BSUB -J ${target}-${pilot}-proteinmpnn-${shard}
 #BSUB -q ${QUEUE}
-#BSUB -n 1
-#BSUB -R "span[ptile=1]"
-#BSUB -R "rusage[mem=2000]"
-#BSUB -o ${LOG_DIR}/${shard}.%J.out
+#BSUB -n ${mpnn_ncpu}
+${mpnn_resource_lines}#BSUB -o ${LOG_DIR}/${shard}.%J.out
 #BSUB -e ${LOG_DIR}/${shard}.%J.err
 
 set -euo pipefail
@@ -280,6 +364,17 @@ ALL_TAGS="$RUNLIST_DIR/all_tags.txt"
 echo "AfCyc GPU resource request: queue=${GPU_QUEUE}, ncpu=${GPU_NCPU}, span=${GPU_SPAN}, gpu=${GPU_REQ}"
 echo "AfCyc CPU resource request: queue=${CPU_QUEUE}, ncpu=${CPU_NCPU}, span=${CPU_SPAN}"
 
+for required_script in "$AFCYC_SCRIPT" "$RMSD_SCRIPT" "$MERGE_SCRIPT"; do
+    if [[ ! -s "$required_script" ]]; then
+        echo "ERROR: required workflow script is missing or empty: $required_script" >&2
+        exit 2
+    fi
+    if grep -Eqi "dummy .*entrypoint|replace this file path with the real" "$required_script"; then
+        echo "ERROR: demo/dummy script cannot be used for a production AfCycDesign run: $required_script" >&2
+        exit 2
+    fi
+done
+
 python3 - <<'PY' "$INPUT_DIR" "$ALL_TAGS"
 import sys, os, glob
 input_dir, out_file = sys.argv[1], sys.argv[2]
@@ -333,7 +428,7 @@ for RUNLIST in "$RUNLIST_DIR"/runlist_*.txt; do
 
     af_submit=$(bsub <<EOF
 #!/bin/bash
-#BSUB -J ${target_lower}_afcyc_${shard}
+#BSUB -J ${target}-${pilot}-afcycdesign-${shard}
 #BSUB -q ${GPU_QUEUE}
 #BSUB -n ${afcyc_gpu_ncpu}
 #BSUB -R ${afcyc_gpu_span}
@@ -351,6 +446,14 @@ date
   --offset_type 2 \
   --num_recycles ${afcyc_num_recycles} \
   --num_models ${afcyc_num_models}
+if [[ ! -s "${SHARD_OUT_DIR}/results.csv" ]]; then
+  echo "ERROR: AfCycDesign finished without a non-empty results.csv in ${SHARD_OUT_DIR}" >&2
+  exit 3
+fi
+if ! find "${SHARD_OUT_DIR}/pred_pdbs" -maxdepth 1 -type f -name "*.pdb" -print -quit | grep -q .; then
+  echo "ERROR: AfCycDesign finished without predicted PDB files in ${SHARD_OUT_DIR}/pred_pdbs" >&2
+  exit 3
+fi
 date
 EOF
 )
@@ -360,7 +463,7 @@ EOF
 
     rmsd_submit=$(bsub -w "done(${af_job_id})" <<EOF
 #!/bin/bash
-#BSUB -J ${target_lower}_rmsd_${shard}
+#BSUB -J ${target}-${pilot}-afcycrmsd-${shard}
 #BSUB -q ${CPU_QUEUE}
 #BSUB -n ${afcyc_cpu_ncpu}
 #BSUB -R ${afcyc_cpu_span}
@@ -385,11 +488,11 @@ done
 if [[ ${#RMSD_JOB_IDS[@]} -gt 0 ]]; then
     DEP=$(printf "done(%s) && " "${RMSD_JOB_IDS[@]}")
     DEP=${DEP% && }
-    MERGED_CSV="$MERGED_DIR/results_merged.csv"
+    MERGED_CSV="$MERGED_DIR/results_merged_${target}_${pilot}.csv"
 
     bsub -w "$DEP" <<EOF
 #!/bin/bash
-#BSUB -J ${target_lower}_afcyc_merge
+#BSUB -J ${target}-${pilot}-afcycmerge-merged
 #BSUB -q ${CPU_QUEUE}
 #BSUB -n 1
 #BSUB -R "span[ptile=1]"
@@ -406,7 +509,7 @@ fi
 
 echo "Submitted ${#AFCYC_JOB_IDS[@]} ${target} AfCyc shard jobs."
 echo "Submitted ${#RMSD_JOB_IDS[@]} ${target} RMSD shard jobs."
-echo "Merged csv: $MERGED_DIR/results_merged.csv"
+echo "Merged csv: $MERGED_DIR/results_merged_${target}_${pilot}.csv"
 """
 
 
@@ -432,7 +535,6 @@ TARGET_CHAIN=${target_chain}
 BINDER_CHAIN=${binder_chain}
 
 NCPU=${pyro_ncpu}
-PTILE=${pyro_ptile}
 
 RUNLIST_DIR="$OUT_BASE/runlists"
 SHARD_INPUT_ROOT="$OUT_BASE/shard_inputs"
@@ -442,6 +544,17 @@ MERGED_DIR="$OUT_BASE/merged"
 
 mkdir -p "$RUNLIST_DIR" "$SHARD_INPUT_ROOT" "$SHARD_RESULT_ROOT" "$LOG_DIR" "$MERGED_DIR"
 ALL_TAGS="$RUNLIST_DIR/all_pdbs.txt"
+
+for required_script in "$SCRIPT" "$MERGE_SCRIPT"; do
+    if [[ ! -s "$required_script" ]]; then
+        echo "ERROR: required workflow script is missing or empty: $required_script" >&2
+        exit 2
+    fi
+    if grep -Eqi "dummy .*entrypoint|replace this file path with the real" "$required_script"; then
+        echo "ERROR: demo/dummy script cannot be used for a production PyRosetta run: $required_script" >&2
+        exit 2
+    fi
+done
 
 count_input_pdbs() {
     find "$INPUT_DIR" -maxdepth 1 -type f -name "*.pdb" | wc -l
@@ -522,11 +635,10 @@ for RUNLIST in "$RUNLIST_DIR"/runlist_*.txt; do
 
     job_submit_output=$(bsub <<EOF
 #!/bin/bash
-#BSUB -J ${target_lower}_pyro_${shard}
+#BSUB -J ${target}-${pilot}-pyrosetta-${shard}
 #BSUB -q ${QUEUE}
 #BSUB -n ${NCPU}
-#BSUB -R "span[ptile=${PTILE}]"
-#BSUB -o ${LOG_DIR}/${shard}.%J.out
+${pyro_resource_lines}#BSUB -o ${LOG_DIR}/${shard}.%J.out
 #BSUB -e ${LOG_DIR}/${shard}.%J.err
 
 set -euo pipefail
@@ -544,6 +656,11 @@ export NUMEXPR_NUM_THREADS=${NCPU}
   --binder_chain "$BINDER_CHAIN" \
 ${pyro_flags}
 
+if [[ ! -s "$SHARD_OUT_CSV" ]]; then
+  echo "ERROR: PyRosetta finished without a non-empty score CSV: $SHARD_OUT_CSV" >&2
+  exit 4
+fi
+
 date
 EOF
 )
@@ -556,11 +673,11 @@ done
 if [[ ${#JOB_IDS[@]} -gt 0 ]]; then
     DEP=$(printf "done(%s) && " "${JOB_IDS[@]}")
     DEP=${DEP% && }
-    MERGED_CSV="$MERGED_DIR/pyrosetta_scores_merged.csv"
+    MERGED_CSV="$MERGED_DIR/pyrosetta_scores_merged_${target}_${pilot}.csv"
 
     bsub -w "$DEP" <<EOF
 #!/bin/bash
-#BSUB -J ${target_lower}_pyro_merge
+#BSUB -J ${target}-${pilot}-pyrosettamerge-merged
 #BSUB -q ${QUEUE}
 #BSUB -n 1
 #BSUB -R "span[ptile=1]"
@@ -574,6 +691,11 @@ date
   --shard_root "$SHARD_RESULT_ROOT" \
   --out_csv "$MERGED_CSV"
 
+if [[ ! -s "$MERGED_CSV" ]]; then
+  echo "ERROR: PyRosetta merge finished without a non-empty merged CSV: $MERGED_CSV" >&2
+  exit 5
+fi
+
 date
 EOF
 fi
@@ -582,7 +704,7 @@ if [[ ${#JOB_IDS[@]} -ne "$N_SHARDS" ]]; then
     echo "WARNING: submitted ${#JOB_IDS[@]} PyRosetta shard jobs, requested ${N_SHARDS}. Check input pdb count and runlists under $RUNLIST_DIR." >&2
 fi
 echo "Submitted ${#JOB_IDS[@]} ${target} PyRosetta shard jobs."
-echo "Merged csv: $MERGED_DIR/pyrosetta_scores_merged.csv"
+echo "Merged csv: $MERGED_DIR/pyrosetta_scores_merged_${target}_${pilot}.csv"
 """
 
 
@@ -613,6 +735,10 @@ def build_values(config: dict) -> dict:
     afcyc_cpu_span = afcyc.get("cpu_span") or f"span[ptile={afcyc_cpu_ncpu}]"
     rf_gpu_ncpu = rf.get("gpu_ncpu", afcyc_gpu_ncpu)
     rf_gpu_span = rf.get("gpu_span") or f"span[ptile={rf_gpu_ncpu}]"
+    hotspot_residues = normalize_hotspot_res(rf.get("hotspot_res", ""))
+    rf_hotspot_line = ""
+    if hotspot_residues:
+        rf_hotspot_line = "  'ppi.hotspot_res=[" + ",".join(hotspot_residues) + "]' \\\n"
     values.update({
         "rf_queue": sh_quote(rf.get("queue", afcyc.get("gpu_queue", "hgx-aais-didier"))),
         "rf_gpu_ncpu": rf_gpu_ncpu,
@@ -623,11 +749,14 @@ def build_values(config: dict) -> dict:
         "rf_n_shards": rf.get("n_shards", 10),
         "rf_designs_per_shard": rf.get("designs_per_shard", 20),
         "rf_diffuser_T": rf.get("diffuser_T", 50),
+        "rf_hotspot_line": rf_hotspot_line,
         "mpnn_queue": mpnn.get("queue", "33"),
         "mpnn_env": sh_quote(mpnn.get("env_name", "proteinmpnn_binder_design")),
         "mpnn_script": sh_quote(mpnn.get("script", "$HOME/dl_binder_design/mpnn_fr/dl_interface_design.py")),
         "mpnn_n_shards": mpnn.get("n_shards", 20),
-        "mpnn_relax_cycles": mpnn.get("relax_cycles", 4),
+        "mpnn_ncpu": mpnn.get("ncpu", 1),
+        "mpnn_resource_lines": lsf_resource_lines(mpnn.get("resource_req", "")),
+        "mpnn_relax_cycles": mpnn.get("relax_cycles") or 4,
         "mpnn_seqs_per_struct": mpnn.get("seqs_per_struct", 1),
         "afcyc_gpu_queue": afcyc.get("gpu_queue", "8v100-32-sc"),
         "afcyc_cpu_queue": afcyc.get("cpu_queue", "33"),
@@ -655,7 +784,7 @@ def build_values(config: dict) -> dict:
         "pyro_merge_script_bundle_name": Path(pyro.get("local_merge_script", "merge_pyrosetta_csvs.py")).name,
         "pyro_n_shards": pyro.get("n_shards", 50),
         "pyro_ncpu": pyro.get("ncpu", 2),
-        "pyro_ptile": pyro.get("ptile", 2),
+        "pyro_resource_lines": lsf_resource_lines(pyro.get("resource_req", "")),
         "pyro_flags": pyro_flags(config),
     })
     for key in ("scratch_root", "input_pdb", "target_chain", "binder_chain", "home_project_dir"):
@@ -668,14 +797,10 @@ def generate(config: dict, output_root: Path, force: bool) -> list[Path]:
     target_root = output_root / f"{config['target']}_workflow"
     files = {
         target_root / "1.RFDiffusion" / f"submit_{config['target']}_rfdiffusion_{config.get('pilot', 'pilot0')}.sh": RFDIFFUSION_TEMPLATE,
-        target_root / "2.ProteinMPNN" / f"submit_{config['target']}_mpnn_relax{config['proteinmpnn'].get('relax_cycles', 4)}_shards.sh": PROTEINMPNN_TEMPLATE,
+        target_root / "2.ProteinMPNN" / f"submit_{config['target']}_mpnn_relax{config['proteinmpnn'].get('relax_cycles') or 4}_shards.sh": PROTEINMPNN_TEMPLATE,
         target_root / "3.AfCycDesign" / "submit_afcyc_shards_integrated.sh": AFCYC_TEMPLATE,
         target_root / "4.PyRosetta" / "submit_pyrosetta_shards.sh": PYROSETTA_TEMPLATE,
     }
-    written = []
-    for path, template in files.items():
-        write_file(path, render(template, values), force)
-        written.append(path)
     bundle_sources = {
         target_root / "inputs" / values["input_pdb_bundle_name"]: config.get("local_input_pdb"),
         target_root / "scripts" / values["afcyc_script_bundle_name"]: config["afcyc"].get("local_afcyc_script"),
@@ -684,19 +809,14 @@ def generate(config: dict, output_root: Path, force: bool) -> list[Path]:
         target_root / "scripts" / values["pyro_script_bundle_name"]: config["pyrosetta"].get("local_script"),
         target_root / "scripts" / values["pyro_merge_script_bundle_name"]: config["pyrosetta"].get("local_merge_script"),
     }
-    missing = []
-    for destination, source in bundle_sources.items():
-        if not source:
-            missing.append(f"{destination}: no local source configured")
-            continue
-        source_path = resolve_local_path(source)
-        if not source_path.is_file():
-            missing.append(f"{source_path}")
-            continue
+    resolved_sources = validate_bundle_sources(config, bundle_sources)
+    written = []
+    for path, template in files.items():
+        write_file(path, render(template, values), force)
+        written.append(path)
+    for destination, source_path in resolved_sources.items():
         copy_file(source_path, destination, force)
         written.append(destination)
-    if missing:
-        raise FileNotFoundError("Missing bundle source files:\n" + "\n".join(missing))
     return written
 
 

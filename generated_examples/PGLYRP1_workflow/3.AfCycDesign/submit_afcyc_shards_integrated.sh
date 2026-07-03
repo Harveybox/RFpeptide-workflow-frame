@@ -142,7 +142,7 @@ done
 if [[ ${#RMSD_JOB_IDS[@]} -gt 0 ]]; then
     DEP=$(printf "done(%s) && " "${RMSD_JOB_IDS[@]}")
     DEP=${DEP% && }
-    MERGED_CSV="$MERGED_DIR/results_merged.csv"
+    MERGED_CSV="$MERGED_DIR/results_merged_PGLYRP1_pilot0.csv"
 
     bsub -w "$DEP" <<EOF
 #!/bin/bash
@@ -163,4 +163,4 @@ fi
 
 echo "Submitted ${#AFCYC_JOB_IDS[@]} PGLYRP1 AfCyc shard jobs."
 echo "Submitted ${#RMSD_JOB_IDS[@]} PGLYRP1 RMSD shard jobs."
-echo "Merged csv: $MERGED_DIR/results_merged.csv"
+echo "Merged csv: $MERGED_DIR/results_merged_PGLYRP1_pilot0.csv"

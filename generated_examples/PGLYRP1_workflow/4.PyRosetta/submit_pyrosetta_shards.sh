@@ -146,7 +146,7 @@ done
 if [[ ${#JOB_IDS[@]} -gt 0 ]]; then
     DEP=$(printf "done(%s) && " "${JOB_IDS[@]}")
     DEP=${DEP% && }
-    MERGED_CSV="$MERGED_DIR/pyrosetta_scores_merged.csv"
+    MERGED_CSV="$MERGED_DIR/pyrosetta_scores_merged_PGLYRP1_pilot0.csv"
 
     bsub -w "$DEP" <<EOF
 #!/bin/bash
@@ -172,4 +172,4 @@ if [[ ${#JOB_IDS[@]} -ne "$N_SHARDS" ]]; then
     echo "WARNING: submitted ${#JOB_IDS[@]} PyRosetta shard jobs, requested ${N_SHARDS}. Check input pdb count and runlists under $RUNLIST_DIR." >&2
 fi
 echo "Submitted ${#JOB_IDS[@]} PGLYRP1 PyRosetta shard jobs."
-echo "Merged csv: $MERGED_DIR/pyrosetta_scores_merged.csv"
+echo "Merged csv: $MERGED_DIR/pyrosetta_scores_merged_PGLYRP1_pilot0.csv"
